@@ -365,6 +365,7 @@
     'tp-yt-app-drawer#guide #contentContainer',
     '[class*="ytwReelActionBarViewModelHost"] button',
     '.expand-collapse-button button',
+    '.ytdMiniplayerComponentContent',
   ].join(',');
 
   let liveStyle = null;
