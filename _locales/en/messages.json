@@ -4,7 +4,7 @@
     "description": "Extension name; keep as is in every language."
   },
   "extDescription": {
-    "message": "Frosted, refractive glass interface for YouTube™ with page-wide ambient light from the playing video, keeping text legible. Not affiliated with YouTube or Google."
+    "message": "Frosted glass interface for YouTube™ with ambient light from the playing video. Text stays legible. Not affiliated with YouTube."
   },
   "optEnabled": {
     "message": "Enable"

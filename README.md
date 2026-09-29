@@ -37,6 +37,14 @@ Chrome offers no way to change those at runtime.
 2. Unpacked installs auto-reload: edit any file and the extension and open
    YouTube tabs reload within ~2 s (`src/content/dev-reload.js`).
 
+## Release build
+
+`python3 scripts/build.py` → `dist/glasslight-<version>.zip`, ready for the
+Chrome Web Store. It drops the dev auto-reload and checks that every file the
+manifest references exists, locales share one key set, and descriptions fit
+Chrome's 132-character limit. Store texts, privacy answers and assets live in
+`store/` (`store/listing.md`); the privacy policy is [PRIVACY.md](PRIVACY.md).
+
 ## Layout
 
 ```

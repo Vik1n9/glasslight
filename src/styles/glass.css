@@ -119,8 +119,8 @@ html:not(.lg-on) #lg-ambient {
   transform-origin: 0 0;
   opacity: var(--lg-glow-opacity, 0);
   filter: blur(3px) saturate(1.6);
-  -webkit-mask-image: linear-gradient(#000 82%, transparent);
-  mask-image: linear-gradient(#000 82%, transparent);
+  /* No mask here: it would clip the blur at the box edge (see ambient.js,
+     the fades live on #lg-glow-clip). */
   transition: opacity 0.6s var(--lg-ease);
   will-change: transform;
 }
@@ -176,6 +176,13 @@ html.lg-on:is(:fullscreen, :has(:fullscreen)) ytd-app,
 html.lg-on ytd-watch-flexy[fullscreen] #full-bleed-container,
 html.lg-on ytd-watch-flexy[fullscreen] #player-full-bleed-container {
   background: #000 !important;
+}
+
+/* YouTube's watch layout can overshoot the viewport by ~10 px at some
+   widths (it sizes columns from innerWidth, ignoring the scrollbar),
+   leaving a stray horizontal scrollbar. The page never scrolls sideways. */
+html.lg-on body {
+  overflow-x: hidden;
 }
 
 /* YouTube's own ambient mode and frosted strip would double the effect. */

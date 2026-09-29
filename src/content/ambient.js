@@ -32,6 +32,7 @@
   const GLOW_TOP = 72;
   const GLOW_BOTTOM = 20;
   const GLOW_EDGE_PX = 44; // on-screen softness of the halo's side edges
+  const GLOW_FADE_PX = 32; // fade before a side panel instead of a hard cut
 
   let video = null;
   let frameCb = 0;
@@ -123,7 +124,22 @@
     glow.style.transform = `translate(${r.left - side}px, ${r.top - GLOW_TOP}px) scale(${sx}, ${h / H})`;
     // The blur runs in canvas pixels before scaling; size it for the screen.
     glow.style.filter = `blur(${(GLOW_EDGE_PX / sx).toFixed(2)}px) saturate(1.6) brightness(var(--lg-glow-lift, 1))`;
-    glowClip.style.clipPath = clipAt < innerWidth ? `inset(0 ${Math.max(0, innerWidth - clipAt)}px 0 0)` : '';
+    // Masks live on the full-viewport wrapper, never on the glow itself: a
+    // mask clips an element to its own box, which would cut off the blur's
+    // spill and leave hard vertical edges. Two soft stops, intersected:
+    //  - bottom: fade out just under the player, where the title sits;
+    //  - side panel: fade out before it instead of a hard seam.
+    const glowTop = r.top - GLOW_TOP;
+    const bottom = `linear-gradient(to bottom, #000 ${glowTop + h * 0.82}px, transparent ${glowTop + h}px)`;
+    const sideFade =
+      clipAt < innerWidth
+        ? `linear-gradient(to right, #000 ${Math.max(0, clipAt - GLOW_FADE_PX)}px, transparent ${clipAt}px)`
+        : 'linear-gradient(#000, #000)';
+    const mask = `${bottom}, ${sideFade}`;
+    glowClip.style.maskImage = mask;
+    glowClip.style.maskComposite = 'intersect';
+    glowClip.style.webkitMaskImage = mask;
+    glowClip.style.webkitMaskComposite = 'source-in';
   }
 
   const SIDE_PANELS = [
