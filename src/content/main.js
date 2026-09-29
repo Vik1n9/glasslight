@@ -6,6 +6,7 @@
     // [selector, refraction options]
     ['ytd-masthead #container.ytd-masthead', { radius: 28, bezel: 16, scale: 30 }],
     ['ytd-feed-filter-chip-bar-renderer #chips-wrapper', { radius: 24, bezel: 14, scale: 26 }],
+    ['ytd-tabbed-page-header #tabs-inner-container', { radius: 24, bezel: 14, scale: 26 }],
   ];
 
   const isWatch = () => location.pathname === '/watch' || location.pathname.startsWith('/live/');

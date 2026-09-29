@@ -145,6 +145,7 @@ html.lg-on ytd-item-section-renderer,
 html.lg-on ytd-shorts,
 html.lg-on #shorts-container,
 html.lg-on ytd-tabbed-page-header,
+html.lg-on ytd-tabbed-page-header #page-header,
 html.lg-on #page-header-container,
 html.lg-on #tabs-container,
 html.lg-on tp-yt-app-header,
@@ -274,6 +275,19 @@ html.lg-on .lg-glass .ytSearchboxComponentSearchButton {
   border-color: rgb(var(--lg-fill-rgb) / 0.12) !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+}
+
+/* Channel page tab bar (sticky under the masthead): a glass capsule. */
+html.lg-on ytd-tabbed-page-header #tabs-inner-container.lg-glass {
+  --lg-radius: 24px;
+  box-sizing: border-box !important;
+  margin: 4px 12px !important;
+  padding: 0 12px !important;
+  border-bottom: 0 !important;
+}
+
+html.lg-on ytd-tabbed-page-header #tabs-divider {
+  display: none !important;
 }
 
 /* Placeholder text inside glass follows the vibrant secondary colour. */
@@ -458,6 +472,32 @@ html.lg-on ytd-reel-video-renderer :is(
   [class*="reel-metapanel"]
 ) {
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.6), 0 0 12px rgb(0 0 0 / 0.35);
+}
+
+/* "Show more" under home shelves: YouTube paints an opaque block behind the
+   button to mask the divider line. Drop it and let the button itself be a
+   floating glass capsule, whose frost and tint cover the line. */
+html.lg-on .button-container.ytd-rich-shelf-renderer {
+  background: transparent !important;
+}
+
+html.lg-on .expand-collapse-button button.ytSpecButtonShapeNextHost,
+html.lg-on .ytd-rich-shelf-renderer .expand-collapse-button button {
+  background:
+    linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
+    rgb(var(--lg-glass-rgb) / max(var(--lg-glass-alpha), 0.6)) !important;
+  -webkit-backdrop-filter: blur(calc(var(--lg-blur) * 0.6)) saturate(180%) !important;
+  backdrop-filter: blur(calc(var(--lg-blur) * 0.6)) saturate(180%) !important;
+  border: 0 !important;
+  box-shadow:
+    inset 0 1px 0 rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.6)),
+    inset 0 0 0 0.5px rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.4)),
+    0 4px 14px rgb(var(--lg-shadow-rgb) / var(--lg-shadow-alpha)) !important;
+  transition: transform 0.35s var(--lg-spring);
+}
+
+html.lg-on .expand-collapse-button button.ytSpecButtonShapeNextHost:active {
+  transform: scale(0.95);
 }
 
 /* ---------- 4. Content layer: fills + transparency (no glass) ------------ */
