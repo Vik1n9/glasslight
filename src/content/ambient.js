@@ -22,6 +22,7 @@
   let glow; // unscrimmed light radiating from behind the player
   let gctx;
   let glowKey = '';
+  let glowClip; // screen-space clip so the glow never half-covers side panels
   let glassAlpha = 0;
 
   // Glow margin around the player, px. Portrait players (Shorts) have empty
@@ -64,7 +65,12 @@
     glow.height = H;
     glow.id = 'lg-glow';
     gctx = glow.getContext('2d', { alpha: false });
-    root.append(display, scrim, glow);
+    // The glow sits in an untransformed full-viewport wrapper so it can be
+    // clipped in screen coordinates (see placeGlow).
+    glowClip = document.createElement('div');
+    glowClip.id = 'lg-glow-clip';
+    glowClip.append(glow);
+    root.append(display, scrim, glowClip);
     (document.body || document.documentElement).prepend(root);
 
     sample = new OffscreenCanvas(SAMPLE_W, SAMPLE_H);
@@ -103,7 +109,11 @@
     const player = video?.closest('.html5-video-player'); // #movie_player or #shorts-player
     if (!glow || !player) return;
     const r = player.getBoundingClientRect();
-    const key = `${r.left | 0},${r.top | 0},${r.width | 0},${r.height | 0}`;
+    // Side panels right of the player (playlist, live chat, recommendations
+    // column; theater-mode chat) are content: the halo stops at their edge
+    // instead of washing over part of them.
+    const clipAt = panelEdgeRightOf(r);
+    const key = `${r.left | 0},${r.top | 0},${r.width | 0},${r.height | 0},${clipAt | 0}`;
     if (key === glowKey) return;
     glowKey = key;
     const side = r.height > r.width ? GLOW_SIDE_PORTRAIT : GLOW_SIDE;
@@ -113,6 +123,28 @@
     glow.style.transform = `translate(${r.left - side}px, ${r.top - GLOW_TOP}px) scale(${sx}, ${h / H})`;
     // The blur runs in canvas pixels before scaling; size it for the screen.
     glow.style.filter = `blur(${(GLOW_EDGE_PX / sx).toFixed(2)}px) saturate(1.6) brightness(var(--lg-glow-lift, 1))`;
+    glowClip.style.clipPath = clipAt < innerWidth ? `inset(0 ${Math.max(0, innerWidth - clipAt)}px 0 0)` : '';
+  }
+
+  const SIDE_PANELS = [
+    '#secondary.ytd-watch-flexy',
+    '#panels-full-bleed-container.ytd-watch-flexy',
+    'ytd-live-chat-frame',
+  ];
+
+  // Left edge of the nearest visible panel to the right of the player that
+  // overlaps it vertically; innerWidth when there is none.
+  function panelEdgeRightOf(r) {
+    let edge = innerWidth;
+    for (const sel of SIDE_PANELS) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+      const p = el.getBoundingClientRect();
+      if (!p.width || !p.height) continue;
+      const beside = p.left >= r.right - 1 && p.top < r.bottom && p.bottom > r.top;
+      if (beside) edge = Math.min(edge, p.left);
+    }
+    return edge;
   }
 
   // Reposition only when geometry can change — never per video frame, which

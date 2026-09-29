@@ -125,6 +125,11 @@ html:not(.lg-on) #lg-ambient {
   will-change: transform;
 }
 
+#lg-glow-clip {
+  position: absolute;
+  inset: 0;
+}
+
 html:not(.lg-player-page) #lg-glow {
   display: none;
 }
@@ -504,6 +509,15 @@ html.lg-on [class*="ytwReelActionBarViewModelHost"] button.ytSpecButtonShapeNext
 
 html.lg-on [class*="ytwReelActionBarViewModelHost"] button.ytSpecButtonShapeNextHost:active {
   transform: scale(0.92);
+}
+
+/* Bright footage behind the title (ambient.js sets lg-video-bright from the
+   frame's bottom band): deepen YouTube's own fade under the metadata, per
+   the "dim clear elements over bright media" rule. Normal frames keep
+   YouTube's lighter fade. */
+html.lg-on.lg-video-bright ytd-shorts .ytReelPlayerOverlayViewModelMetadataContainer {
+  background: linear-gradient(0deg, rgb(0 0 0 / 0.62), rgb(0 0 0 / 0.4) 55%, rgb(0 0 0 / 0)) !important;
+  transition: background 0.4s var(--lg-ease);
 }
 
 /* Title / channel sit directly on the footage, outside the scrim's reach:
