@@ -159,6 +159,20 @@ html.lg-on ytd-watch-flexy[full-bleed-player] #full-bleed-container {
   background: transparent !important;
 }
 
+/* Fullscreen: the light isn't visible and is paused anyway (ambient.js);
+   letterbox / pillarbox areas must be true black again. */
+html.lg-on:is(:fullscreen, :has(:fullscreen)) #lg-ambient {
+  display: none !important;
+}
+
+html.lg-on:is(:fullscreen, :has(:fullscreen)),
+html.lg-on:is(:fullscreen, :has(:fullscreen)) body,
+html.lg-on:is(:fullscreen, :has(:fullscreen)) ytd-app,
+html.lg-on ytd-watch-flexy[fullscreen] #full-bleed-container,
+html.lg-on ytd-watch-flexy[fullscreen] #player-full-bleed-container {
+  background: #000 !important;
+}
+
 /* YouTube's own ambient mode and frosted strip would double the effect. */
 html.lg-on #cinematics,
 html.lg-on #cinematics-container,

@@ -15,8 +15,10 @@
   let dctx;
   let sample;
   let sctx;
-  let probe; // raw-frame canvas for bar / brightness / DRM detection
+  let probe; // raw-frame canvas for bar / brightness / DRM detection (GPU)
   let pctx;
+  let probeRead; // CPU copy of the 32×18 probe, the only one read back
+  let prctx;
   let glow; // unscrimmed light radiating from behind the player
   let gctx;
   let glowKey = '';
@@ -67,8 +69,14 @@
 
     sample = new OffscreenCanvas(SAMPLE_W, SAMPLE_H);
     sctx = sample.getContext('2d', { willReadFrequently: true });
+    // Two steps on purpose: drawing the video straight into a
+    // willReadFrequently (CPU) canvas reads the full-resolution frame back
+    // from the GPU (~15 ms for 4K), while getImageData on a GPU canvas trips
+    // Chrome's readback warning. Scale on the GPU, then copy 32×18 to CPU.
     probe = new OffscreenCanvas(SAMPLE_W, SAMPLE_H);
-    pctx = probe.getContext('2d', { willReadFrequently: true });
+    pctx = probe.getContext('2d');
+    probeRead = new OffscreenCanvas(SAMPLE_W, SAMPLE_H);
+    prctx = probeRead.getContext('2d', { willReadFrequently: true });
   }
 
   // ---- video source --------------------------------------------------------
@@ -88,7 +96,6 @@
     dctx.filter = 'none';
     dctx.globalAlpha = 1;
     gctx.drawImage(display, 0, 0);
-    placeGlow();
   }
 
   // Keep the glow canvas scaled onto the player's on-screen rect.
@@ -108,8 +115,15 @@
     glow.style.filter = `blur(${(GLOW_EDGE_PX / sx).toFixed(2)}px) saturate(1.6) brightness(var(--lg-glow-lift, 1))`;
   }
 
-  addEventListener('scroll', () => requestAnimationFrame(placeGlow), { passive: true });
-  addEventListener('resize', () => requestAnimationFrame(placeGlow), { passive: true });
+  // Reposition only when geometry can change — never per video frame, which
+  // would force a layout on YouTube's large DOM 30 times a second.
+  let glowRaf = 0;
+  const queueGlow = () => {
+    if (!glowRaf) glowRaf = requestAnimationFrame(() => ((glowRaf = 0), placeGlow()));
+  };
+  addEventListener('scroll', queueGlow, { passive: true });
+  addEventListener('resize', queueGlow, { passive: true });
+  const playerResize = new ResizeObserver(queueGlow);
 
   function onFrame(now) {
     frameCb = 0;
@@ -177,6 +191,11 @@
     video = el;
     videoBlocked = false;
     blackTicks = 0;
+    playerResize.disconnect();
+    const player = video.closest('.html5-video-player');
+    if (player) playerResize.observe(player);
+    glowKey = '';
+    queueGlow();
     for (const [ev, fn] of Object.entries(videoEvents)) video.addEventListener(ev, fn);
     if (video.readyState >= 2) drawOnce();
     schedule();
@@ -198,7 +217,8 @@
     let px;
     try {
       pctx.drawImage(video, 0, 0, SAMPLE_W, SAMPLE_H);
-      px = pctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
+      prctx.drawImage(probe, 0, 0);
+      px = prctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
     } catch {
       blockVideo();
       return;
@@ -220,7 +240,7 @@
     for (let y = 0; y < SAMPLE_H && allDark; y += 1) allDark = rowDark(y);
     if (allDark && !video.paused && video.currentTime > 2) {
       blackTicks += 1;
-      if (blackTicks > 8000 / STATS_MS) blockVideo();
+      if (blackTicks > 8000 / (STATS_MS * 2)) blockVideo(); // analysed every 2nd tick
       return;
     }
     blackTicks = 0;
@@ -276,9 +296,12 @@
 
   // ---- stats → CSS variables (legibility + light spill) --------------------
 
+  let tickCount = 0;
+
   function tick() {
     if (!active()) return;
-    analyseRawFrame();
+    // Letterbox / brightness / DRM checks don't need 4 Hz.
+    if ((tickCount += 1) % 2 === 0) analyseRawFrame();
     sctx.drawImage(display, 0, 0, SAMPLE_W, SAMPLE_H);
     const px = sctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
     const dark = LG.isDarkTheme();
@@ -308,15 +331,56 @@
     }
     glassAlpha = glass > glassAlpha ? glass : glassAlpha + (glass - glassAlpha) * 0.15;
 
-    const s = document.documentElement.style;
-    s.setProperty('--lg-glass-live', glassAlpha.toFixed(3));
-    s.setProperty('--lg-ambient-opacity', opacity.toFixed(3));
-    s.setProperty('--lg-glow-opacity', glowOpacity.toFixed(3));
-    s.setProperty('--lg-glow-lift', glowLift.toFixed(3));
-    s.setProperty('--lg-scrim', scrim.toFixed(3));
-    s.setProperty('--lg-tint-rgb', rgb.join(' '));
-    s.setProperty('--lg-ambient-lum', lum.toFixed(3));
+    // Read layout before any write below: a write followed by a layout read
+    // forces a synchronous style recalc (~50 ms on YouTube's DOM).
+    placeGlow();
+
+    // Light-layer values live on #lg-ambient: changing them restyles only
+    // its three children, not the whole page.
+    const a = root.style;
+    setVar(a, '--lg-ambient-opacity', opacity.toFixed(2));
+    setVar(a, '--lg-glow-opacity', glowOpacity.toFixed(2));
+    setVar(a, '--lg-glow-lift', glowLift.toFixed(2));
+    setVar(a, '--lg-scrim', scrim.toFixed(2));
+    // Values the glass surfaces read go into one rule that matches only the
+    // glass elements (see liveRule): an inherited custom property changed on
+    // <html> would restyle the entire document every tick. Quantized so an
+    // unchanged look writes nothing.
+    const g = liveRule();
+    setVar(g, '--lg-glass-live', (Math.round(glassAlpha * 50) / 50).toFixed(2));
+    setVar(g, '--lg-tint-rgb', rgb.map((c) => Math.round(c / 8) * 8).join(' '));
   }
+
+  // Everything that reads --lg-tint-rgb / --lg-glass-live in glass.css.
+  const GLASS_SCOPE = [
+    '.lg-glass',
+    '.lg-clear',
+    'ytd-menu-popup-renderer',
+    'ytd-multi-page-menu-renderer',
+    'tp-yt-paper-dialog',
+    'yt-sheet-view-model',
+    '.ytSearchboxComponentSuggestionsContainer',
+    'ytd-notification-renderer',
+    'tp-yt-paper-toast',
+    'tp-yt-app-drawer#guide #contentContainer',
+    '[class*="ytwReelActionBarViewModelHost"] button',
+    '.expand-collapse-button button',
+  ].join(',');
+
+  let liveStyle = null;
+  function liveRule() {
+    if (!liveStyle?.isConnected) {
+      liveStyle = document.createElement('style');
+      liveStyle.id = 'lg-live-vars';
+      liveStyle.textContent = `html.lg-on :is(${GLASS_SCOPE}) {}`;
+      (document.head || document.documentElement).append(liveStyle);
+    }
+    return liveStyle.sheet.cssRules[0].style;
+  }
+
+  const setVar = (style, name, value) => {
+    if (style.getPropertyValue(name) !== value) style.setProperty(name, value);
+  };
 
   const ambientOpacity = () =>
     LG.settings.reduceTransparency || LG.prefersReducedTransparency()

@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Glasslight for YouTube™</title>
+    <title data-i18n="extName">Glasslight for YouTube™</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main class="glass">
       <header>
         <h1>Glasslight</h1>
-        <label class="switch" title="啟用">
+        <label class="switch" data-i18n-title="optEnabled">
           <input type="checkbox" data-key="enabled" />
           <span></span>
         </label>
@@ -17,26 +17,26 @@
 
       <section>
         <label class="row">
-          <span>環境光強度 <output data-for="intensity"></output></span>
+          <span><span data-i18n="optIntensity"></span> <output data-for="intensity"></output></span>
           <input type="range" min="0" max="100" step="5" data-key="intensity" />
         </label>
         <label class="row">
-          <span>玻璃模糊 <output data-for="blur"></output></span>
+          <span><span data-i18n="optBlur"></span> <output data-for="blur"></output></span>
           <input type="range" min="8" max="48" step="2" data-key="blur" />
         </label>
         <label class="row">
-          <span>文字對比目標 <output data-for="contrastTarget"></output></span>
+          <span><span data-i18n="optContrast"></span> <output data-for="contrastTarget"></output></span>
           <input type="range" min="3" max="7" step="0.5" data-key="contrastTarget" />
         </label>
       </section>
 
       <section>
-        <label class="toggle"><span>折射（Lensing）</span><input type="checkbox" data-key="refraction" /></label>
-        <label class="toggle"><span>降低透明度</span><input type="checkbox" data-key="reduceTransparency" /></label>
-        <label class="toggle"><span>效能模式</span><input type="checkbox" data-key="performance" /></label>
+        <label class="toggle"><span data-i18n="optRefraction"></span><input type="checkbox" data-key="refraction" /></label>
+        <label class="toggle"><span data-i18n="optReduceTransparency"></span><input type="checkbox" data-key="reduceTransparency" /></label>
+        <label class="toggle"><span data-i18n="optPerformance"></span><input type="checkbox" data-key="performance" /></label>
       </section>
 
-      <footer><button id="reset" type="button">恢復預設</button></footer>
+      <footer><button id="reset" type="button" data-i18n="optReset"></button></footer>
     </main>
     <script src="popup.js"></script>
   </body>

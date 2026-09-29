@@ -1,22 +1,41 @@
 {
   "manifest_version": 3,
-  "name": "Glasslight for YouTube™",
+  "name": "__MSG_extName__",
   "version": "0.1.0",
-  "description": "Frosted, refractive glass interface for YouTube™ with page-wide ambient light from the playing video, keeping text legible. Not affiliated with YouTube or Google.",
+  "default_locale": "en",
+  "description": "__MSG_extDescription__",
   "minimum_chrome_version": "116",
-  "permissions": ["storage"],
-  "host_permissions": ["https://i.ytimg.com/*"],
-  "background": { "service_worker": "src/background.js" },
-  "action": {
-    "default_title": "Glasslight for YouTube™",
-    "default_popup": "src/popup/popup.html",
-    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "128": "icons/icon-128.png" }
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://i.ytimg.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
   },
-  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "128": "icons/icon-128.png" },
+  "action": {
+    "default_title": "__MSG_extName__",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "128": "icons/icon-128.png"
+  },
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/*"],
-      "css": ["src/styles/glass.css"],
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "css": [
+        "src/styles/glass.css"
+      ],
       "js": [
         "src/content/settings.js",
         "src/content/contrast.js",

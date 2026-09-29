@@ -20,9 +20,11 @@
     try {
       res = await snapshot();
     } catch {
-      clearInterval(timer); // context invalidated
+      // A worker restart can reject one ping; only a dead context is final.
+      if (!chrome.runtime?.id) clearInterval(timer);
       return;
     }
+    document.documentElement.dataset.lgDev = 'watching';
     if (!res || res.now === res.loaded) return;
     clearInterval(timer);
     try {

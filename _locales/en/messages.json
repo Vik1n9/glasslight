@@ -1,0 +1,33 @@
+{
+  "extName": {
+    "message": "Glasslight for YouTube™",
+    "description": "Extension name; keep as is in every language."
+  },
+  "extDescription": {
+    "message": "Frosted, refractive glass interface for YouTube™ with page-wide ambient light from the playing video, keeping text legible. Not affiliated with YouTube or Google."
+  },
+  "optEnabled": {
+    "message": "Enable"
+  },
+  "optIntensity": {
+    "message": "Ambient light"
+  },
+  "optBlur": {
+    "message": "Glass blur"
+  },
+  "optContrast": {
+    "message": "Text contrast target"
+  },
+  "optRefraction": {
+    "message": "Refraction (lensing)"
+  },
+  "optReduceTransparency": {
+    "message": "Reduce transparency"
+  },
+  "optPerformance": {
+    "message": "Performance mode"
+  },
+  "optReset": {
+    "message": "Reset to defaults"
+  }
+}

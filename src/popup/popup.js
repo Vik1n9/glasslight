@@ -14,6 +14,15 @@ const format = {
   contrastTarget: (v) => `${Number(v).toFixed(1)}:1`,
 };
 
+// Localize: text from _locales via chrome.i18n (follows the browser language).
+document.documentElement.lang = chrome.i18n.getUILanguage();
+for (const el of document.querySelectorAll('[data-i18n]')) {
+  el.textContent = chrome.i18n.getMessage(el.dataset.i18n);
+}
+for (const el of document.querySelectorAll('[data-i18n-title]')) {
+  el.title = chrome.i18n.getMessage(el.dataset.i18nTitle);
+}
+
 const inputs = [...document.querySelectorAll('[data-key]')];
 
 function render(settings) {

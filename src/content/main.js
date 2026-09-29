@@ -34,6 +34,7 @@
     if (!s.enabled) {
       LG.ambient.stop();
       LG.thumbs.disable();
+      restoreMastheadTheme();
       return;
     }
     LG.ambient.start({ onBlocked: () => LG.thumbs.showVideo(videoId()) });
@@ -92,13 +93,31 @@
   // The searchbox also gets its own *Dark classes (ytSearchboxComponentHostDark…).
   const DARK_CLASS = /^ytSearchboxComponent\w*Dark$/;
 
+  // What we stripped, so turning the extension off hands YouTube its own
+  // masthead back.
+  const stripped = { dark: null, classes: [] };
+
+  function restoreMastheadTheme() {
+    if (stripped.dark?.isConnected) stripped.dark.setAttribute('dark', '');
+    for (const [el, c] of stripped.classes) if (el.isConnected) el.classList.add(c);
+    stripped.dark = null;
+    stripped.classes = [];
+  }
+
   function syncMastheadTheme() {
     const masthead = document.querySelector('ytd-masthead');
     if (!masthead) return;
     if (LG.settings.enabled && !html.hasAttribute('dark')) {
-      if (masthead.hasAttribute('dark')) masthead.removeAttribute('dark');
+      if (masthead.hasAttribute('dark')) {
+        masthead.removeAttribute('dark');
+        stripped.dark = masthead;
+      }
       for (const el of masthead.querySelectorAll('[class*="Dark"]')) {
-        for (const c of [...el.classList]) if (DARK_CLASS.test(c)) el.classList.remove(c);
+        for (const c of [...el.classList]) {
+          if (!DARK_CLASS.test(c)) continue;
+          el.classList.remove(c);
+          stripped.classes.push([el, c]);
+        }
       }
     }
     if (mastheadObserver?.target === masthead) return;
@@ -120,16 +139,22 @@
     { passive: true },
   );
 
+  // The rim highlight faces the pointer, like a light source. Written on the
+  // few glass elements only (not <html>, which would restyle the whole page),
+  // in 3° steps so small pointer moves cost nothing.
   let specRaf = 0;
+  let specAngle = '';
   addEventListener(
     'pointermove',
     (e) => {
-      if (specRaf || LG.prefersReducedMotion()) return;
+      if (specRaf || LG.prefersReducedMotion() || !LG.settings.enabled) return;
       specRaf = requestAnimationFrame(() => {
         specRaf = 0;
-        // The rim highlight faces the pointer, like a light source.
-        const angle = (Math.atan2(e.clientY - innerHeight / 2, e.clientX - innerWidth / 2) * 180) / Math.PI;
-        html.style.setProperty('--lg-spec-angle', `${(angle + 90).toFixed(1)}deg`);
+        const deg = (Math.atan2(e.clientY - innerHeight / 2, e.clientX - innerWidth / 2) * 180) / Math.PI + 90;
+        const next = `${Math.round(deg / 3) * 3}deg`;
+        if (next === specAngle) return;
+        specAngle = next;
+        for (const el of document.querySelectorAll('.lg-glass, .lg-clear')) el.style.setProperty('--lg-spec-angle', next);
       });
     },
     { passive: true },

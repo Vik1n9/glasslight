@@ -23,6 +23,11 @@ target WCAG contrast (default 4.5:1) against the weakest text colour, and does
 the same for the navigation glass tint over the player glow. Secondary text is
 raised (vibrancy) so the light can stay brighter at equal contrast.
 
+## Languages
+
+Traditional Chinese, Simplified Chinese, English and Spanish (`_locales/`),
+chosen automatically from the browser language; English is the fallback.
+
 ## Install (development)
 
 1. `chrome://extensions` → Developer mode → **Load unpacked** → this folder.
@@ -47,6 +52,11 @@ src/popup/                settings UI
 
 - Chromium drops CSS filter functions after a `url()` in `backdrop-filter`,
   so refracting surfaces do blur → displace → saturate inside the SVG filter.
+- Performance: live values that change every 250 ms are never written to
+  `<html>` (an inherited custom property there restyles all of YouTube, and a
+  layout read after it forces that synchronously, ~50 ms). Light-layer values
+  sit on `#lg-ambient`; glass tint lives in one rule matching only glass
+  elements. Frame analysis scales on a GPU canvas before any CPU readback.
 - Refraction is Chromium-only; with it off (or in performance mode) glass
   falls back to `blur() saturate()`.
 - Honours `prefers-reduced-transparency`, `prefers-contrast: more`,

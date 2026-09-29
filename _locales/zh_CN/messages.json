@@ -1,0 +1,33 @@
+{
+  "extName": {
+    "message": "Glasslight for YouTube™",
+    "description": "Extension name; keep as is in every language."
+  },
+  "extDescription": {
+    "message": "为 YouTube™ 加上磨砂折射玻璃界面，并以播放中的视频生成全页环境光，同时保持文字清晰可读。与 YouTube 或 Google 无关。"
+  },
+  "optEnabled": {
+    "message": "启用"
+  },
+  "optIntensity": {
+    "message": "环境光强度"
+  },
+  "optBlur": {
+    "message": "玻璃模糊"
+  },
+  "optContrast": {
+    "message": "文字对比度目标"
+  },
+  "optRefraction": {
+    "message": "折射（Lensing）"
+  },
+  "optReduceTransparency": {
+    "message": "降低透明度"
+  },
+  "optPerformance": {
+    "message": "性能模式"
+  },
+  "optReset": {
+    "message": "恢复默认"
+  }
+}

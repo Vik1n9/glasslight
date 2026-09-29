@@ -1,0 +1,33 @@
+{
+  "extName": {
+    "message": "Glasslight for YouTube™",
+    "description": "Extension name; keep as is in every language."
+  },
+  "extDescription": {
+    "message": "Interfaz de cristal esmerilado y refractivo para YouTube™ con luz ambiental en toda la página generada por el vídeo en reproducción, manteniendo el texto legible. Sin afiliación con YouTube ni Google."
+  },
+  "optEnabled": {
+    "message": "Activar"
+  },
+  "optIntensity": {
+    "message": "Luz ambiental"
+  },
+  "optBlur": {
+    "message": "Desenfoque del cristal"
+  },
+  "optContrast": {
+    "message": "Contraste objetivo del texto"
+  },
+  "optRefraction": {
+    "message": "Refracción (lente)"
+  },
+  "optReduceTransparency": {
+    "message": "Reducir transparencia"
+  },
+  "optPerformance": {
+    "message": "Modo rendimiento"
+  },
+  "optReset": {
+    "message": "Restablecer valores"
+  }
+}
