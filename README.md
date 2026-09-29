@@ -31,6 +31,16 @@ Korean (`_locales/`). By default the popup follows the browser language
 extension's name and store description always follow the browser language —
 Chrome offers no way to change those at runtime.
 
+## Install
+
+Download
+[glasslight-1.0.0.zip](https://github.com/Vik1n9/glasslight/releases/latest/download/glasslight-1.0.0.zip)
+from [Releases](https://github.com/Vik1n9/glasslight/releases). Unzip it so the
+folder contains `manifest.json`, then `chrome://extensions` → Developer mode →
+**Load unpacked** → that folder. Chromium 116 or newer; Edge and Brave use the
+same steps. The packaged file is the one to install — the release's "Source
+code" archive is the repository, including the development reloader.
+
 ## Install (development)
 
 1. `chrome://extensions` → Developer mode → **Load unpacked** → this folder.
