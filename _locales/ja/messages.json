@@ -1,0 +1,39 @@
+{
+  "extName": {
+    "message": "Glasslight for YouTube™",
+    "description": "Extension name; keep as is in every language."
+  },
+  "extDescription": {
+    "message": "YouTube™ にすりガラス風の屈折するガラスインターフェースを加え、再生中の動画からページ全体にアンビエントライトを生成します。文字の読みやすさは保たれます。YouTube および Google とは関係ありません。"
+  },
+  "optEnabled": {
+    "message": "有効にする"
+  },
+  "optIntensity": {
+    "message": "アンビエントライト"
+  },
+  "optBlur": {
+    "message": "ガラスのぼかし"
+  },
+  "optContrast": {
+    "message": "文字コントラストの目標"
+  },
+  "optRefraction": {
+    "message": "屈折（レンズ効果）"
+  },
+  "optReduceTransparency": {
+    "message": "透明度を下げる"
+  },
+  "optPerformance": {
+    "message": "パフォーマンスモード"
+  },
+  "optReset": {
+    "message": "デフォルトに戻す"
+  },
+  "optLanguage": {
+    "message": "言語"
+  },
+  "optLanguageAuto": {
+    "message": "ブラウザに合わせる"
+  }
+}

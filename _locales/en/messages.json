@@ -29,5 +29,11 @@
   },
   "optReset": {
     "message": "Reset to defaults"
+  },
+  "optLanguage": {
+    "message": "Language"
+  },
+  "optLanguageAuto": {
+    "message": "Follow browser"
   }
 }

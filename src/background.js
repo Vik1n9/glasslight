@@ -47,10 +47,17 @@ async function thumbPixels(url) {
 
 // ---- development auto-reload (unpacked installs only) ----------------------
 
+const DEV_LOCALES = ['en', 'es', 'ja', 'ko', 'zh_CN', 'zh_TW'];
 const DEV_FILES = [
   'manifest.json',
   manifest.background.service_worker,
   ...manifest.content_scripts.flatMap((c) => [...(c.js || []), ...(c.css || [])]),
+  // chrome.i18n caches messages until reload; popup files are included so
+  // a popup change also refreshes an open page's view of the extension.
+  ...DEV_LOCALES.map((l) => `_locales/${l}/messages.json`),
+  'src/popup/popup.html',
+  'src/popup/popup.js',
+  'src/popup/popup.css',
 ];
 
 async function filesHash() {

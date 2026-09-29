@@ -14,14 +14,41 @@ const format = {
   contrastTarget: (v) => `${Number(v).toFixed(1)}:1`,
 };
 
-// Localize: text from _locales via chrome.i18n (follows the browser language).
-document.documentElement.lang = chrome.i18n.getUILanguage();
-for (const el of document.querySelectorAll('[data-i18n]')) {
-  el.textContent = chrome.i18n.getMessage(el.dataset.i18n);
+// ---- localization -----------------------------------------------------------
+// chrome.i18n always follows the browser language and cannot be overridden,
+// so a user-chosen language is read from its _locales/<lang>/messages.json.
+// "auto" keeps chrome.i18n. (The manifest name/description stay on the
+// browser language — Chrome gives extensions no way to change those.)
+
+async function messagesFor(language) {
+  if (language === 'auto') return (key) => chrome.i18n.getMessage(key);
+  try {
+    const res = await fetch(chrome.runtime.getURL(`_locales/${language}/messages.json`));
+    const messages = await res.json();
+    return (key) => messages[key]?.message ?? chrome.i18n.getMessage(key);
+  } catch {
+    return (key) => chrome.i18n.getMessage(key);
+  }
 }
-for (const el of document.querySelectorAll('[data-i18n-title]')) {
-  el.title = chrome.i18n.getMessage(el.dataset.i18nTitle);
+
+async function localize(language) {
+  const t = await messagesFor(language);
+  document.documentElement.lang = language === 'auto' ? chrome.i18n.getUILanguage() : language.replace('_', '-');
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
 }
+
+const languageSelect = document.getElementById('language');
+
+chrome.storage.sync.get({ language: 'auto' }).then(({ language }) => {
+  languageSelect.value = language;
+  localize(language);
+});
+
+languageSelect.addEventListener('change', () => {
+  chrome.storage.sync.set({ language: languageSelect.value });
+  localize(languageSelect.value);
+});
 
 const inputs = [...document.querySelectorAll('[data-key]')];
 

@@ -25,8 +25,11 @@ raised (vibrancy) so the light can stay brighter at equal contrast.
 
 ## Languages
 
-Traditional Chinese, Simplified Chinese, English and Spanish (`_locales/`),
-chosen automatically from the browser language; English is the fallback.
+Traditional Chinese, Simplified Chinese, English, Spanish, Japanese and
+Korean (`_locales/`). By default the popup follows the browser language
+(English as fallback); a Language menu in the popup overrides it. The
+extension's name and store description always follow the browser language —
+Chrome offers no way to change those at runtime.
 
 ## Install (development)
 

@@ -29,5 +29,11 @@
   },
   "optReset": {
     "message": "恢復預設"
+  },
+  "optLanguage": {
+    "message": "語言"
+  },
+  "optLanguageAuto": {
+    "message": "跟隨瀏覽器"
   }
 }

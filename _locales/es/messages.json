@@ -29,5 +29,11 @@
   },
   "optReset": {
     "message": "Restablecer valores"
+  },
+  "optLanguage": {
+    "message": "Idioma"
+  },
+  "optLanguageAuto": {
+    "message": "Según el navegador"
   }
 }
