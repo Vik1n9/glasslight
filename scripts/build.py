@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Build the Chrome Web Store package: dist/glasslight-<version>.zip
 
-Strips development-only pieces (dev-reload.js) and validates the result:
-every file the manifest references exists, locales share one key set, and
-descriptions fit the 132-character manifest limit.
+Strips development-only pieces (dev-reload.js), forces the service worker's
+DEV flag off, and validates the result: every file the manifest references
+exists, locales share one key set, and descriptions fit the 132-character
+manifest limit.
 """
 import json
 import pathlib
@@ -41,6 +42,18 @@ def main():
     for rel in DEV_ONLY:
         (stage / rel).unlink(missing_ok=True)
     (stage / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
+
+    # A sideloaded zip has no update_url, so the runtime check would treat this
+    # package as a dev build. Force it off here; the source tree is unchanged.
+    bg_path = stage / 'src/background.js'
+    bg = bg_path.read_text()
+    dev_line = "const DEV = !('update_url' in manifest); // unpacked install"
+    if bg.count(dev_line) != 1:
+        fail('expected exactly one unpacked DEV check in src/background.js')
+    bg_path.write_text(bg.replace(dev_line, 'const DEV = false;', 1))
+    patched = bg_path.read_text()
+    if 'const DEV = false;' not in patched or 'update_url' in patched:
+        fail('failed to disable DEV in the release service worker')
 
     # ---- validation ----
     referenced = {manifest['background']['service_worker'], manifest['action']['default_popup']}
