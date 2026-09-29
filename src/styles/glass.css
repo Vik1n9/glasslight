@@ -1,0 +1,581 @@
+/* ==========================================================================
+   Glasslight for YouTube™
+   Layering follows the glass design guidance Apple published at WWDC25
+   ("Meet Liquid Glass"); this project is not affiliated with Apple:
+     background  → #lg-ambient (video / thumbnail light) + legibility scrim
+     content     → NOT glass: plain fills + transparency (videos, description,
+                   comments, panels)
+     navigation  → glass. Regular variant for masthead, chip bar,
+                   menus, drawer; Clear variant (+35% dimming over bright
+                   footage) for player controls. Never glass on glass.
+   Everything is scoped to html.lg-on so the popup toggle is instant.
+   ========================================================================== */
+
+html.lg-on {
+  --lg-base: 249 249 250;
+  --lg-glass-rgb: 250 250 252;
+  --lg-glass-alpha: 0.46;
+  --lg-glass-alpha-scrolled: 0.72;
+  --lg-menu-alpha: 0.78;
+  --lg-fill-rgb: 0 0 0;
+  --lg-fill-alpha: 0.05;
+  --lg-fill-alpha-hover: 0.09;
+  --lg-rim: 255 255 255;
+  --lg-rim-alpha: 0.75;
+  --lg-shadow-rgb: 20 24 40;
+  --lg-shadow-alpha: 0.1;
+  --lg-shadow-alpha-scrolled: 0.2;
+  --lg-tint-rgb: 128 128 128;
+  --lg-spill: 0.1;
+  --lg-spec-angle: 135deg;
+  --lg-blur: 24px;
+  --lg-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --lg-ease: cubic-bezier(0.22, 0.9, 0.24, 1);
+  --lg-radius: 28px;
+  background: rgb(var(--lg-base)) !important;
+}
+
+html.lg-on[dark] {
+  --lg-base: 15 15 15;
+  --lg-glass-rgb: 28 28 30;
+  --lg-glass-alpha: 0.38;
+  --lg-glass-alpha-scrolled: 0.64;
+  --lg-menu-alpha: 0.74;
+  --lg-fill-rgb: 255 255 255;
+  --lg-fill-alpha: 0.07;
+  --lg-fill-alpha-hover: 0.12;
+  --lg-rim-alpha: 0.38;
+  --lg-shadow-rgb: 0 0 0;
+  --lg-shadow-alpha: 0.25;
+  --lg-shadow-alpha-scrolled: 0.5;
+  --lg-spill: 0.14;
+}
+
+/* Vibrancy: secondary labels get more luminous over the lit backdrop so the
+   light can stay brighter at the same contrast (see contrast.js THEMES). */
+html.lg-on[dark],
+html.lg-on[dark] ytd-app {
+  --yt-sys-color-baseline--text-secondary: #c6c6c6 !important;
+  --yt-spec-text-secondary: #c6c6c6 !important;
+}
+
+html.lg-on:not([dark]),
+html.lg-on:not([dark]) ytd-app {
+  --yt-sys-color-baseline--text-secondary: #4a4a4a !important;
+  --yt-spec-text-secondary: #4a4a4a !important;
+}
+
+/* ---------- 1. Background: ambient light + scrim ------------------------ */
+
+#lg-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  background: rgb(var(--lg-base));
+  contain: strict;
+}
+
+html:not(.lg-on) #lg-ambient {
+  display: none;
+}
+
+#lg-ambient-canvas {
+  position: absolute;
+  inset: -6%;
+  width: 112%;
+  height: 112%;
+  opacity: var(--lg-ambient-opacity, 0.4);
+  filter: blur(18px) saturate(1.5);
+  transition: opacity 0.6s var(--lg-ease);
+  animation: lg-drift 48s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes lg-drift {
+  from { transform: scale(1) translate3d(0, 0, 0); }
+  to   { transform: scale(1.06) translate3d(-1.5%, 1%, 0); }
+}
+
+/* Legibility scrim: alpha solved per tick by contrast.js. */
+#lg-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--lg-base));
+  opacity: var(--lg-scrim, 0.7);
+  transition: opacity 0.35s linear;
+}
+
+/* Player glow: the frame radiating from behind the player, above the scrim.
+   ambient.js sizes it to the player rect plus a margin (small at the bottom,
+   where the title sits); the scaled blur makes the edge fade out. */
+#lg-glow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 96px;
+  height: 54px;
+  transform-origin: 0 0;
+  opacity: var(--lg-glow-opacity, 0);
+  filter: blur(3px) saturate(1.6);
+  -webkit-mask-image: linear-gradient(#000 82%, transparent);
+  mask-image: linear-gradient(#000 82%, transparent);
+  transition: opacity 0.6s var(--lg-ease);
+  will-change: transform;
+}
+
+html:not(.lg-player-page) #lg-glow {
+  display: none;
+}
+
+/* Strip YouTube's opaque page paint so the light shows through. */
+html.lg-on body,
+html.lg-on ytd-app,
+html.lg-on #content.ytd-app,
+html.lg-on ytd-page-manager,
+html.lg-on ytd-browse,
+html.lg-on ytd-search,
+html.lg-on ytd-watch-flexy,
+html.lg-on #columns.ytd-watch-flexy,
+html.lg-on ytd-two-column-browse-results-renderer,
+html.lg-on ytd-rich-grid-renderer,
+html.lg-on ytd-section-list-renderer,
+html.lg-on ytd-item-section-renderer,
+html.lg-on ytd-shorts,
+html.lg-on #shorts-container,
+html.lg-on ytd-tabbed-page-header,
+html.lg-on #page-header-container,
+html.lg-on #tabs-container,
+html.lg-on tp-yt-app-header,
+html.lg-on #header.ytd-rich-grid-renderer,
+html.lg-on ytd-feed-filter-chip-bar-renderer,
+html.lg-on ytd-mini-guide-renderer,
+html.lg-on #guide-content.ytd-app,
+html.lg-on tp-yt-app-drawer #contentContainer,
+html.lg-on ytd-watch-flexy[theater] #full-bleed-container,
+html.lg-on ytd-watch-flexy[full-bleed-player] #full-bleed-container {
+  background: transparent !important;
+}
+
+/* YouTube's own ambient mode and frosted strip would double the effect. */
+html.lg-on #cinematics,
+html.lg-on #cinematics-container,
+html.lg-on #shorts-cinematic-container,
+html.lg-on #cinematic-shorts-scrim,
+html.lg-on #frosted-glass,
+html.lg-on #background.ytd-masthead {
+  display: none !important;
+}
+
+/* ---------- 2. Navigation layer: Regular glass --------------------------- */
+
+html.lg-on .lg-glass {
+  position: relative;
+  isolation: isolate;
+  background:
+    /* light spill: the video's colour bleeds onto the surface */
+    linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
+    rgb(var(--lg-glass-rgb) / max(var(--lg-glass-alpha), var(--lg-glass-live, 0))) !important;
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(180%) !important;
+  backdrop-filter: blur(var(--lg-blur)) saturate(180%) !important;
+  border-radius: var(--lg-radius) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.5)),
+    inset 0 0 0 0.5px rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.35)),
+    0 6px 20px rgb(var(--lg-shadow-rgb) / var(--lg-shadow-alpha)) !important;
+  transition:
+    background-color 0.4s var(--lg-ease),
+    box-shadow 0.4s var(--lg-ease);
+}
+
+/* Lensing — refract.js provides an SVG filter that already includes the
+   frost and saturation (Chromium drops CSS functions chained after url()).
+   Without a map yet, fall back to the plain CSS recipe. */
+html.lg-on.lg-refract .lg-glass {
+  -webkit-backdrop-filter: var(--lg-refract, blur(var(--lg-blur)) saturate(180%)) !important;
+  backdrop-filter: var(--lg-refract, blur(var(--lg-blur)) saturate(180%)) !important;
+}
+
+/* Specular rim: a 1px gradient ring that faces the pointer. */
+html.lg-on .lg-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    var(--lg-spec-angle),
+    rgb(var(--lg-rim) / var(--lg-rim-alpha)) 0%,
+    rgb(var(--lg-rim) / 0) 32%,
+    rgb(var(--lg-rim) / 0) 68%,
+    rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.45)) 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+
+/* Adaptive shadow: content scrolling underneath → denser glass, deeper shadow. */
+html.lg-on.lg-scrolled .lg-glass {
+  background:
+    linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
+    rgb(var(--lg-glass-rgb) / max(var(--lg-glass-alpha-scrolled), var(--lg-glass-live, 0))) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.5)),
+    inset 0 0 0 0.5px rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.35)),
+    0 10px 32px rgb(var(--lg-shadow-rgb) / var(--lg-shadow-alpha-scrolled)) !important;
+}
+
+/* Masthead: a floating capsule inset from the window edges. */
+html.lg-on ytd-masthead {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+html.lg-on ytd-masthead #container.ytd-masthead {
+  height: 48px !important;
+  margin: 6px 12px 0 !important;
+  padding: 0 8px !important;
+}
+
+/* Masthead icons rendered while YouTube had it flagged dark keep a baked-in
+   white fill; on a light page make them follow the text colour (the logo
+   keeps its own colours). */
+html.lg-on:not([dark]) ytd-masthead :is(#center, #end, #start #guide-button) :is(yt-icon, .yt-icon-shape) svg:not([fill="none"]),
+html.lg-on:not([dark]) ytd-masthead :is(#center, #end, #start #guide-button) :is(yt-icon, .yt-icon-shape) {
+  fill: var(--yt-sys-color-baseline--text-primary, #0f0f0f) !important;
+  color: var(--yt-sys-color-baseline--text-primary, #0f0f0f) !important;
+}
+
+/* Scroll edge effect: soft fade instead of a hard divider. */
+html.lg-on #masthead-container.ytd-app::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -28px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(rgb(var(--lg-base) / 0.7), rgb(var(--lg-base) / 0));
+  transition: opacity 0.3s var(--lg-ease);
+}
+
+html.lg-on.lg-scrolled #masthead-container.ytd-app::before {
+  opacity: 1;
+}
+
+/* Controls inside navigation glass: fills, never nested glass. */
+html.lg-on .lg-glass .ytSearchboxComponentInputBox,
+html.lg-on .lg-glass #search-icon-legacy,
+html.lg-on .lg-glass .ytSearchboxComponentSearchButton {
+  background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)) !important;
+  border-color: rgb(var(--lg-fill-rgb) / 0.12) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Placeholder text inside glass follows the vibrant secondary colour. */
+html.lg-on .lg-glass input::placeholder {
+  color: var(--yt-sys-color-baseline--text-secondary) !important;
+  opacity: 1;
+}
+
+/* Home / search chip bar */
+html.lg-on ytd-feed-filter-chip-bar-renderer #chips-wrapper.lg-glass {
+  --lg-radius: 24px;
+  box-sizing: border-box !important;
+  max-width: calc(100% - 12px) !important;
+  margin: 4px 0 !important;
+  padding: 0 6px !important;
+}
+
+html.lg-on ytd-feed-filter-chip-bar-renderer #left-arrow,
+html.lg-on ytd-feed-filter-chip-bar-renderer #right-arrow,
+html.lg-on #left-arrow-button,
+html.lg-on #right-arrow-button {
+  background: transparent !important;
+}
+
+html.lg-on ytd-feed-filter-chip-bar-renderer [id$="arrow"]::after,
+html.lg-on ytd-feed-filter-chip-bar-renderer #left-arrow::before {
+  display: none !important;
+}
+
+/* Guide drawer (overlay on watch pages) */
+html.lg-on tp-yt-app-drawer#guide[opened] #contentContainer {
+  background:
+    linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
+    rgb(var(--lg-glass-rgb) / var(--lg-menu-alpha)) !important;
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(180%);
+  backdrop-filter: blur(var(--lg-blur)) saturate(180%);
+  border-radius: 0 var(--lg-radius) var(--lg-radius) 0;
+}
+
+html.lg-on ytd-app:not([guide-persistent-and-visible]) tp-yt-app-drawer#guide[opened] #contentContainer {
+  box-shadow: 0 12px 40px rgb(var(--lg-shadow-rgb) / var(--lg-shadow-alpha-scrolled));
+}
+
+/* Menus, popovers, suggestions, dialogs — glass over arbitrary content,
+   so they use the densest Regular tint. */
+html.lg-on ytd-menu-popup-renderer,
+html.lg-on ytd-multi-page-menu-renderer,
+html.lg-on tp-yt-paper-dialog,
+html.lg-on yt-sheet-view-model,
+html.lg-on .ytSearchboxComponentSuggestionsContainer,
+html.lg-on ytd-notification-renderer,
+html.lg-on tp-yt-paper-toast,
+html.lg-on yt-notification-action-renderer tp-yt-paper-toast {
+  background:
+    linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
+    rgb(var(--lg-glass-rgb) / var(--lg-menu-alpha)) !important;
+  -webkit-backdrop-filter: blur(calc(var(--lg-blur) * 1.25)) saturate(180%) !important;
+  backdrop-filter: blur(calc(var(--lg-blur) * 1.25)) saturate(180%) !important;
+  border: 0 !important;
+  border-radius: 22px !important;
+  box-shadow:
+    inset 0 1px 0 rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.5)),
+    inset 0 0 0 0.5px rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.4)),
+    0 16px 48px rgb(var(--lg-shadow-rgb) / var(--lg-shadow-alpha-scrolled)) !important;
+  overflow: hidden;
+}
+
+/* Their inner wrappers paint their own colour; clear it so the glass reads. */
+html.lg-on ytd-multi-page-menu-renderer #container,
+html.lg-on ytd-multi-page-menu-renderer #sections,
+html.lg-on ytd-menu-popup-renderer tp-yt-paper-listbox,
+html.lg-on yt-sheet-view-model yt-list-view-model {
+  background: transparent !important;
+}
+
+/* ---------- 3. Player: Clear glass --------------------------------------- */
+
+html.lg-on .lg-clear {
+  background:
+    linear-gradient(var(--lg-spec-angle), rgb(255 255 255 / 0.16), rgb(255 255 255 / 0) 45%),
+    rgb(0 0 0 / 0.12) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(160%) !important;
+  backdrop-filter: blur(8px) saturate(160%) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.28),
+    inset 0 0 0 0.5px rgb(255 255 255 / 0.22),
+    0 4px 14px rgb(0 0 0 / 0.18) !important;
+  transition:
+    transform 0.35s var(--lg-spring),
+    background-color 0.3s var(--lg-ease);
+}
+
+html.lg-on.lg-refract .lg-clear {
+  -webkit-backdrop-filter: var(--lg-refract, blur(8px) saturate(160%)) !important;
+  backdrop-filter: var(--lg-refract, blur(8px) saturate(160%)) !important;
+}
+
+/* Per the WWDC25 guidance: Clear glass over bright media gets a 35% dimming layer. */
+html.lg-on.lg-video-bright .lg-clear {
+  background:
+    linear-gradient(var(--lg-spec-angle), rgb(255 255 255 / 0.12), rgb(255 255 255 / 0) 45%),
+    rgb(0 0 0 / 0.35) !important;
+}
+
+html.lg-on .lg-clear:active {
+  transform: scale(0.94);
+}
+
+html.lg-on .ytp-chrome-controls .ytp-time-display,
+html.lg-on .ytp-chrome-controls .ytp-chapter-title,
+html.lg-on .ytp-chrome-controls .ytp-time-contents {
+  text-shadow: 0 0 6px rgb(0 0 0 / 0.55);
+}
+
+/* Settings / quality popups inside the player: denser clear glass. */
+html.lg-on .ytp-popup,
+html.lg-on .ytp-settings-menu,
+html.lg-on .ytp-panel-menu {
+  background: rgb(20 20 22 / 0.62) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(170%) !important;
+  backdrop-filter: blur(24px) saturate(170%) !important;
+  border-radius: 20px !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    inset 0 0 0 0.5px rgb(255 255 255 / 0.18),
+    0 16px 40px rgb(0 0 0 / 0.4) !important;
+}
+
+html.lg-on .ytp-popup .ytp-panel,
+html.lg-on .ytp-popup .ytp-panel-header {
+  background: transparent !important;
+}
+
+/* Rounded player, sitting in the lit page like a card. */
+html.lg-on ytd-watch-flexy:not([theater]):not([fullscreen]) #player-container-outer #movie_player,
+html.lg-on ytd-watch-flexy:not([theater]):not([fullscreen]) #ytd-player {
+  border-radius: 20px;
+}
+
+/* Captions: frosted plate instead of a flat black box. */
+html.lg-on .caption-window {
+  border-radius: 12px;
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) saturate(150%);
+}
+
+/* ---------- 3b. Shorts ------------------------------------------------- */
+
+/* Rounded card for the Short, like the watch player. */
+html.lg-on ytd-shorts #shorts-player,
+html.lg-on ytd-shorts .player-container,
+html.lg-on ytd-shorts .reel-video-in-sequence-thumbnail {
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+/* Like / comment / share: controls floating beside the video → Regular
+   glass circles (each one separate, so never glass on glass). */
+html.lg-on [class*="ytwReelActionBarViewModelHost"] button.ytSpecButtonShapeNextHost {
+  background:
+    linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
+    rgb(var(--lg-glass-rgb) / max(var(--lg-glass-alpha), var(--lg-glass-live, 0))) !important;
+  -webkit-backdrop-filter: blur(calc(var(--lg-blur) * 0.6)) saturate(180%) !important;
+  backdrop-filter: blur(calc(var(--lg-blur) * 0.6)) saturate(180%) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.6)),
+    inset 0 0 0 0.5px rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.4)),
+    0 4px 14px rgb(var(--lg-shadow-rgb) / var(--lg-shadow-alpha)) !important;
+  transition: transform 0.35s var(--lg-spring);
+}
+
+html.lg-on [class*="ytwReelActionBarViewModelHost"] button.ytSpecButtonShapeNextHost:active {
+  transform: scale(0.92);
+}
+
+/* Title / channel sit directly on the footage, outside the scrim's reach:
+   a soft halo keeps them legible on bright frames. */
+html.lg-on ytd-reel-video-renderer :is(
+  .ytShortsVideoTitleViewModelShortsVideoTitle,
+  [class*="ReelChannelBar"],
+  [class*="ReelMetapanel"],
+  [class*="reel-metapanel"]
+) {
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.6), 0 0 12px rgb(0 0 0 / 0.35);
+}
+
+/* ---------- 4. Content layer: fills + transparency (no glass) ------------ */
+
+html.lg-on #description.ytd-watch-metadata,
+html.lg-on ytd-engagement-panel-section-list-renderer,
+html.lg-on ytd-playlist-panel-renderer #container,
+html.lg-on #chat-container,
+html.lg-on ytd-live-chat-frame {
+  background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)) !important;
+  border: 0 !important;
+  border-radius: 20px !important;
+  box-shadow: inset 0 0 0 0.5px rgb(var(--lg-fill-rgb) / 0.08) !important;
+}
+
+html.lg-on #description.ytd-watch-metadata:hover {
+  background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha-hover)) !important;
+}
+
+html.lg-on ytd-engagement-panel-section-list-renderer #content,
+html.lg-on ytd-engagement-panel-section-list-renderer #header,
+html.lg-on ytd-engagement-panel-title-header-renderer,
+html.lg-on ytd-playlist-panel-renderer #header-contents,
+html.lg-on ytd-playlist-panel-renderer .header {
+  background: transparent !important;
+}
+
+/* Engagement panels hold dense text over the light → a darker base fill. */
+html.lg-on[dark] ytd-engagement-panel-section-list-renderer {
+  background: rgb(var(--lg-base) / 0.55) !important;
+}
+
+html.lg-on:not([dark]) ytd-engagement-panel-section-list-renderer {
+  background: rgb(var(--lg-base) / 0.7) !important;
+}
+
+/* Chips and tonal buttons: capsules with fills. */
+html.lg-on yt-chip-cloud-chip-renderer .ytChipShapeChip:not(.ytChipShapeActive),
+html.lg-on .ytChipShapeChip:not(.ytChipShapeActive),
+html.lg-on .yt-spec-button-shape-next--tonal {
+  background: rgb(var(--lg-fill-rgb) / calc(var(--lg-fill-alpha) * 1.4)) !important;
+  transition:
+    transform 0.3s var(--lg-spring),
+    background-color 0.2s var(--lg-ease);
+}
+
+html.lg-on .ytChipShapeChip:not(.ytChipShapeActive):hover,
+html.lg-on .yt-spec-button-shape-next--tonal:hover {
+  background: rgb(var(--lg-fill-rgb) / calc(var(--lg-fill-alpha-hover) * 1.4)) !important;
+}
+
+html.lg-on .ytChipShapeChip:active,
+html.lg-on .yt-spec-button-shape-next--tonal:active,
+html.lg-on .yt-spec-button-shape-next--filled:active {
+  transform: scale(0.95);
+}
+
+/* Legibility insurance: a faint halo around text over the light (dark theme). */
+html.lg-on[dark] #content.ytd-app :is(#video-title, .yt-core-attributed-string, yt-formatted-string) {
+  text-shadow: 0 0 2px rgb(0 0 0 / 0.35);
+}
+
+/* ---------- 5. Accessibility -------------------------------------------- */
+
+/* Reduce Transparency: glass becomes a frosted near-solid surface. */
+html.lg-on.lg-reduce-transparency .lg-glass,
+html.lg-on.lg-reduce-transparency .lg-clear,
+html.lg-on.lg-reduce-transparency ytd-menu-popup-renderer,
+html.lg-on.lg-reduce-transparency ytd-multi-page-menu-renderer {
+  background: rgb(var(--lg-glass-rgb) / 0.96) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html.lg-on .lg-glass,
+  html.lg-on .lg-clear {
+    background: rgb(var(--lg-glass-rgb) / 0.96) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/* Increase Contrast: visible borders, denser tint. */
+@media (prefers-contrast: more) {
+  html.lg-on {
+    --lg-glass-alpha: 0.8;
+    --lg-glass-alpha-scrolled: 0.9;
+    --lg-menu-alpha: 0.94;
+  }
+
+  html.lg-on .lg-glass,
+  html.lg-on .lg-clear {
+    outline: 1px solid rgb(var(--lg-rim) / 0.7);
+    outline-offset: -1px;
+  }
+}
+
+/* Reduce Motion: no drift, no spring. */
+@media (prefers-reduced-motion: reduce) {
+  #lg-ambient-canvas {
+    animation: none;
+  }
+
+  html.lg-on .lg-clear,
+  html.lg-on .ytChipShapeChip,
+  html.lg-on .yt-spec-button-shape-next--tonal {
+    transition: none !important;
+  }
+
+  html.lg-on .lg-clear:active,
+  html.lg-on .ytChipShapeChip:active {
+    transform: none;
+  }
+}
+
+/* Performance mode: no drift, cheaper blur. */
+html.lg-perf #lg-ambient-canvas {
+  animation: none;
+  filter: blur(10px);
+}
