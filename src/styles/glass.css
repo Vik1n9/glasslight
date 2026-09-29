@@ -518,13 +518,17 @@ html.lg-on .expand-collapse-button button.ytSpecButtonShapeNextHost:active {
 
 html.lg-on #description.ytd-watch-metadata,
 html.lg-on ytd-engagement-panel-section-list-renderer,
-html.lg-on ytd-playlist-panel-renderer #container,
+html.lg-on ytd-playlist-panel-renderer > #container,
 html.lg-on #chat-container,
 html.lg-on ytd-live-chat-frame {
   background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)) !important;
   border: 0 !important;
   border-radius: 20px !important;
   box-shadow: inset 0 0 0 0.5px rgb(var(--lg-fill-rgb) / 0.08) !important;
+}
+
+html.lg-on ytd-live-chat-frame {
+  overflow: hidden; /* clip the chat iframe to the rounded fill */
 }
 
 html.lg-on #description.ytd-watch-metadata:hover {
@@ -535,8 +539,16 @@ html.lg-on ytd-engagement-panel-section-list-renderer #content,
 html.lg-on ytd-engagement-panel-section-list-renderer #header,
 html.lg-on ytd-engagement-panel-title-header-renderer,
 html.lg-on ytd-playlist-panel-renderer #header-contents,
-html.lg-on ytd-playlist-panel-renderer .header {
+html.lg-on ytd-playlist-panel-renderer .header,
+html.lg-on ytd-playlist-panel-renderer #items.playlist-items {
   background: transparent !important;
+}
+
+/* Playlist panel: the playing row gets a soft fill instead of YouTube's
+   near-opaque highlight. */
+html.lg-on ytd-playlist-panel-video-renderer[selected] {
+  background: rgb(var(--lg-fill-rgb) / calc(var(--lg-fill-alpha-hover) * 1.2)) !important;
+  border-radius: 12px;
 }
 
 /* Engagement panels hold dense text over the light → a darker base fill. */

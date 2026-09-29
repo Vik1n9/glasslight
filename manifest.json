@@ -46,6 +46,21 @@
         "src/content/dev-reload.js"
       ],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/live_chat*",
+        "https://www.youtube.com/live_chat_replay*"
+      ],
+      "all_frames": true,
+      "css": [
+        "src/styles/live-chat.css"
+      ],
+      "js": [
+        "src/content/settings.js",
+        "src/content/frame.js"
+      ],
+      "run_at": "document_start"
     }
   ]
 }

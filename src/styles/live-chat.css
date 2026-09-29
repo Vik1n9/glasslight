@@ -1,0 +1,65 @@
+/* ==========================================================================
+   Glasslight — live chat iframe (/live_chat, /live_chat_replay)
+   The chat is page content, so it follows the content-layer rules: no glass,
+   only light fills over the ambient light the parent page draws behind the
+   (transparent) iframe.
+   ========================================================================== */
+
+html.lg-on {
+  --lg-fill-rgb: 0 0 0;
+  --lg-fill-alpha: 0.05;
+  /* Same vibrancy lift as the main page (see contrast.js THEMES). */
+  --yt-live-chat-secondary-text-color: #4a4a4a !important;
+  --yt-sys-color-baseline--text-secondary: #4a4a4a !important;
+}
+
+html.lg-on[dark] {
+  --lg-fill-rgb: 255 255 255;
+  --lg-fill-alpha: 0.07;
+  --yt-live-chat-secondary-text-color: #c6c6c6 !important;
+  --yt-sys-color-baseline--text-secondary: #c6c6c6 !important;
+}
+
+/* Let the parent's light through. */
+html.lg-on,
+html.lg-on body,
+html.lg-on yt-live-chat-app,
+html.lg-on yt-live-chat-renderer,
+html.lg-on yt-live-chat-item-list-renderer,
+html.lg-on #item-scroller,
+html.lg-on #items.yt-live-chat-item-list-renderer {
+  background: transparent !important;
+}
+
+/* Header and composer: fills with a hairline instead of opaque bars. */
+html.lg-on yt-live-chat-header-renderer {
+  background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)) !important;
+  border-bottom: 0.5px solid rgb(var(--lg-fill-rgb) / 0.1) !important;
+}
+
+html.lg-on yt-live-chat-message-input-renderer,
+html.lg-on #panel-pages.yt-live-chat-renderer {
+  background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)) !important;
+  border-top: 0.5px solid rgb(var(--lg-fill-rgb) / 0.1) !important;
+}
+
+/* Cards (engagement notice, pinned banners): rounded fills. */
+html.lg-on yt-live-chat-viewer-engagement-message-renderer #card,
+html.lg-on yt-live-chat-banner-renderer,
+html.lg-on yt-live-chat-banner-renderer #contents,
+html.lg-on yt-live-chat-ticker-renderer {
+  background: rgb(var(--lg-fill-rgb) / calc(var(--lg-fill-alpha) * 1.6)) !important;
+  border-radius: 16px !important;
+}
+
+/* The composer field sits on a fill already — keep it a soft capsule. */
+html.lg-on yt-live-chat-message-input-renderer #input-container {
+  background: rgb(var(--lg-fill-rgb) / calc(var(--lg-fill-alpha) * 1.4)) !important;
+  border-radius: 999px !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html.lg-on yt-live-chat-renderer {
+    background: Canvas !important;
+  }
+}
