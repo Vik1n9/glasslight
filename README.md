@@ -19,17 +19,20 @@ legible.
 
 **Transparency.** One slider spans the material. At 50 % (default) it is the
 designed look: Regular glass over a colour wash of the video. Towards 0 the
-glass turns solid. Towards 100 it becomes the Clear variant and the backdrop
+glass thickens (denser tint, heavier frost). Towards 100 it becomes the
+Clear variant and the backdrop
 turns from a wash into the footage itself (sharper, larger canvas, less
 blur, proportions kept), so a reef video fills the whole page with fish
-while the glass lenses them. Reduce Transparency pins it at 50 %; Reduce
-Motion keeps the backdrop a wash.
+while the glass lenses them. Neither end stops being glass: the tint stays
+between 0.12 and 0.88, frost never drops under 8 px, light keeps spilling
+in, and the rim brightens as the tint thins. Reduce Transparency pins it at
+50 %; Reduce Motion keeps the backdrop a wash.
 
 **Legibility.** Text is never made translucent. Every 250 ms `ambient.js`
 solves a *scrim map*: for each cell of a 16×9 grid, `contrast.js` finds the
 smallest scrim alpha that keeps the worst sampled pixel there at the target
 WCAG contrast (default 4.5:1) against the weakest text colour, with 5 %
-headroom; the map is dilated by a cell and stretched smoothly over the page.
+headroom (10 % for sharp immersive footage); the map is dilated by a cell and stretched smoothly over the page.
 Dark water stays vivid, only bright shoals are dimmed. The masthead's glass
 tint is solved the same way over what is really behind it (ambient → scrim
 map → player glow). Secondary text is raised (vibrancy) so the light can stay

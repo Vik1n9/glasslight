@@ -457,8 +457,10 @@
 
   function solveScrimMap(px, opacity, dark) {
     // Per cell there is no page-wide worst case to hide model error behind
-    // (glass shadows, the ¼ s between ticks, the drift): keep 5 % in hand.
-    const target = LG.settings.contrastTarget * 1.05;
+    // (glass shadows, the ¼ s between ticks, the drift): keep 5 % in hand,
+    // 10 % for sharp immersive footage, where a fish can cross small text
+    // between two ticks.
+    const target = LG.settings.contrastTarget * (1.05 + 0.05 * clarity);
     for (let c = 0; c < cellSamples.length; c += 1) {
       const idx = cellSamples[c];
       const buf = cellPx[c];

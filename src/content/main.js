@@ -19,12 +19,16 @@
     return document.querySelector('#movie_player video.html5-main-video');
   }
 
-  // Clear glass frosts less so the footage behind stays recognisable; over
-  // scrolled content it keeps the full frost (scroll edge effect).
+  // Towards solid the glass frosts harder (thicker glass); Clear glass frosts
+  // less so the footage behind stays recognisable, but never under 8 px, so
+  // it still reads as glass. Over scrolled content the frost is full
+  // (scroll edge effect).
   let frost = '';
+  const fullFrost = (s) => s.blur * (1 + 0.25 * Math.max(0, (50 - s.transparency) / 50));
   function applyFrost() {
     const s = LG.settings;
-    const px = scrolled ? s.blur : s.blur * (1 - 0.6 * LG.immersion());
+    const full = fullFrost(s);
+    const px = scrolled ? full : Math.max(Math.min(8, full), full * (1 - 0.5 * LG.immersion()));
     const next = `${px.toFixed(1)}px`;
     if (next === frost) return;
     frost = next;
@@ -45,7 +49,7 @@
     // Transparency pins it there).
     const t = s.transparency > 50 ? 50 + 50 * LG.immersion() : s.transparency;
     html.style.setProperty('--lg-transparency', (t / 100).toFixed(2));
-    html.style.setProperty('--lg-blur-full', `${s.blur}px`);
+    html.style.setProperty('--lg-blur-full', `${fullFrost(s).toFixed(1)}px`);
     applyFrost();
     if (!refractionOn()) LG.refract.detachAll();
     if (!s.enabled) {

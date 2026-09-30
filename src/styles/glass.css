@@ -22,7 +22,7 @@ html.lg-on {
   --lg-fill-alpha: 0.05;
   --lg-fill-alpha-hover: 0.09;
   --lg-rim: 255 255 255;
-  --lg-rim-alpha: 0.75;
+  --lg-rim-base: 0.75;
   --lg-shadow-rgb: 20 24 40;
   --lg-shadow-alpha: 0.1;
   --lg-shadow-alpha-scrolled: 0.2;
@@ -45,7 +45,7 @@ html.lg-on[dark] {
   --lg-fill-rgb: 255 255 255;
   --lg-fill-alpha: 0.07;
   --lg-fill-alpha-hover: 0.12;
-  --lg-rim-alpha: 0.38;
+  --lg-rim-base: 0.38;
   --lg-shadow-rgb: 0 0 0;
   --lg-shadow-alpha: 0.25;
   --lg-shadow-alpha-scrolled: 0.5;
@@ -53,21 +53,27 @@ html.lg-on[dark] {
 }
 
 /* Transparency (popup slider → --lg-transparency, 0–1; ambient.js and
-   main.js read the same setting). 0.5 is the designed look. Towards 0 every
-   tint rises linearly to fully opaque ("solid"); towards 1 the glass turns
-   into the Clear variant ("immerse"): tints fall to near-clear and the light
-   spill mostly fades, so the footage behind reads as itself. Legibility over
-   that footage comes from the backdrop's scrim map and --lg-glass-live, not
-   from the tint. Glass over scrolled content keeps a denser floor (Apple's
-   scroll edge effect): text under text is never clear. */
+   main.js read the same setting). 0.5 is the designed look. Towards 0
+   ("solid") the glass thickens: tints rise and main.js frosts harder.
+   Towards 1 ("immerse") it becomes the Clear variant, so the footage behind
+   reads as itself. Neither end stops being glass: tints stay within
+   [--lg-tint-floor, --lg-tint-cap] (never opaque, never gone), light still
+   spills in, the rim brightens as the tint thins, and lensing and frost
+   stay on. Legibility over the footage comes from the backdrop's scrim map
+   and --lg-glass-live, not from the tint. Glass over scrolled content keeps
+   a denser floor (Apple's scroll edge effect): text under text is never
+   clear. Menus float over arbitrary content and stay denser still. */
 html.lg-on {
+  --lg-tint-floor: 0.12;
+  --lg-tint-cap: 0.88;
   --lg-solid: clamp(0, (0.5 - var(--lg-transparency, 0.5)) * 2, 1);
   --lg-immerse: clamp(0, (var(--lg-transparency, 0.5) - 0.5) * 2, 1);
-  --lg-glass-alpha: calc(var(--lg-glass-base) + (1 - var(--lg-glass-base)) * var(--lg-solid) - (var(--lg-glass-base) - 0.03) * var(--lg-immerse));
-  --lg-glass-alpha-scrolled: calc(var(--lg-glass-base-scrolled) + (1 - var(--lg-glass-base-scrolled)) * var(--lg-solid) - (var(--lg-glass-base-scrolled) - 0.4) * var(--lg-immerse));
-  --lg-menu-alpha: calc(var(--lg-menu-base) + (1 - var(--lg-menu-base)) * var(--lg-solid) - (var(--lg-menu-base) - 0.5) * var(--lg-immerse));
-  --lg-shelf-alpha: calc(var(--lg-shelf-base) + (1 - var(--lg-shelf-base)) * var(--lg-solid) - (var(--lg-shelf-base) - 0.03) * var(--lg-immerse));
-  --lg-spill: calc(var(--lg-spill-base) * (1 - 0.7 * var(--lg-immerse)));
+  --lg-glass-alpha: calc(var(--lg-glass-base) + (var(--lg-tint-cap) - var(--lg-glass-base)) * var(--lg-solid) - (var(--lg-glass-base) - var(--lg-tint-floor)) * var(--lg-immerse));
+  --lg-glass-alpha-scrolled: calc(var(--lg-glass-base-scrolled) + (0.9 - var(--lg-glass-base-scrolled)) * var(--lg-solid) - (var(--lg-glass-base-scrolled) - 0.4) * var(--lg-immerse));
+  --lg-menu-alpha: calc(var(--lg-menu-base) + (0.92 - var(--lg-menu-base)) * var(--lg-solid) - (var(--lg-menu-base) - 0.5) * var(--lg-immerse));
+  --lg-shelf-alpha: calc(var(--lg-shelf-base) + (var(--lg-tint-cap) - var(--lg-shelf-base)) * var(--lg-solid) - (var(--lg-shelf-base) - var(--lg-tint-floor)) * var(--lg-immerse));
+  --lg-spill: calc(var(--lg-spill-base) * (1 - 0.4 * var(--lg-immerse)));
+  --lg-rim-alpha: min(1, calc(var(--lg-rim-base) * (1 + 0.4 * var(--lg-immerse))));
 }
 
 /* Vibrancy: secondary labels get more luminous over the lit backdrop so the
