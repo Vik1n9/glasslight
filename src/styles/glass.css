@@ -14,9 +14,10 @@
 html.lg-on {
   --lg-base: 249 249 250;
   --lg-glass-rgb: 250 250 252;
-  --lg-glass-alpha: 0.46;
-  --lg-glass-alpha-scrolled: 0.72;
-  --lg-menu-alpha: 0.78;
+  --lg-glass-base: 0.46;
+  --lg-glass-base-scrolled: 0.72;
+  --lg-menu-base: 0.78;
+  --lg-shelf-base: 0.6;
   --lg-fill-rgb: 0 0 0;
   --lg-fill-alpha: 0.05;
   --lg-fill-alpha-hover: 0.09;
@@ -26,7 +27,7 @@ html.lg-on {
   --lg-shadow-alpha: 0.1;
   --lg-shadow-alpha-scrolled: 0.2;
   --lg-tint-rgb: 128 128 128;
-  --lg-spill: 0.1;
+  --lg-spill-base: 0.1;
   --lg-spec-angle: 135deg;
   --lg-blur: 24px;
   --lg-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -38,9 +39,9 @@ html.lg-on {
 html.lg-on[dark] {
   --lg-base: 15 15 15;
   --lg-glass-rgb: 28 28 30;
-  --lg-glass-alpha: 0.38;
-  --lg-glass-alpha-scrolled: 0.64;
-  --lg-menu-alpha: 0.74;
+  --lg-glass-base: 0.38;
+  --lg-glass-base-scrolled: 0.64;
+  --lg-menu-base: 0.74;
   --lg-fill-rgb: 255 255 255;
   --lg-fill-alpha: 0.07;
   --lg-fill-alpha-hover: 0.12;
@@ -48,7 +49,20 @@ html.lg-on[dark] {
   --lg-shadow-rgb: 0 0 0;
   --lg-shadow-alpha: 0.25;
   --lg-shadow-alpha-scrolled: 0.5;
-  --lg-spill: 0.14;
+  --lg-spill-base: 0.14;
+}
+
+/* Glass opacity (popup slider → --lg-opacity, 0–1). 0.5 keeps the designed
+   tints above; below it every tint fades linearly to near-clear (0.03) and
+   the light spill with it, above it to fully opaque. */
+html.lg-on {
+  --lg-opacity-up: clamp(0, (var(--lg-opacity, 0.5) - 0.5) * 2, 1);
+  --lg-opacity-down: clamp(0, (0.5 - var(--lg-opacity, 0.5)) * 2, 1);
+  --lg-glass-alpha: calc(var(--lg-glass-base) + (1 - var(--lg-glass-base)) * var(--lg-opacity-up) - (var(--lg-glass-base) - 0.03) * var(--lg-opacity-down));
+  --lg-glass-alpha-scrolled: calc(var(--lg-glass-base-scrolled) + (1 - var(--lg-glass-base-scrolled)) * var(--lg-opacity-up) - (var(--lg-glass-base-scrolled) - 0.03) * var(--lg-opacity-down));
+  --lg-menu-alpha: calc(var(--lg-menu-base) + (1 - var(--lg-menu-base)) * var(--lg-opacity-up) - (var(--lg-menu-base) - 0.03) * var(--lg-opacity-down));
+  --lg-shelf-alpha: calc(var(--lg-shelf-base) + (1 - var(--lg-shelf-base)) * var(--lg-opacity-up) - (var(--lg-shelf-base) - 0.03) * var(--lg-opacity-down));
+  --lg-spill: calc(var(--lg-spill-base) * (1 - var(--lg-opacity-down)));
 }
 
 /* Vibrancy: secondary labels get more luminous over the lit backdrop so the
@@ -549,7 +563,7 @@ html.lg-on .expand-collapse-button button.ytSpecButtonShapeNextHost,
 html.lg-on .ytd-rich-shelf-renderer .expand-collapse-button button {
   background:
     linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
-    rgb(var(--lg-glass-rgb) / max(var(--lg-glass-alpha), 0.6)) !important;
+    rgb(var(--lg-glass-rgb) / var(--lg-shelf-alpha)) !important;
   -webkit-backdrop-filter: blur(calc(var(--lg-blur) * 0.6)) saturate(180%) !important;
   backdrop-filter: blur(calc(var(--lg-blur) * 0.6)) saturate(180%) !important;
   border: 0 !important;
@@ -660,9 +674,9 @@ html.lg-on.lg-reduce-transparency ytd-multi-page-menu-renderer {
 /* Increase Contrast: visible borders, denser tint. */
 @media (prefers-contrast: more) {
   html.lg-on {
-    --lg-glass-alpha: 0.8;
-    --lg-glass-alpha-scrolled: 0.9;
-    --lg-menu-alpha: 0.94;
+    --lg-glass-base: 0.8;
+    --lg-glass-base-scrolled: 0.9;
+    --lg-menu-base: 0.94;
   }
 
   html.lg-on .lg-glass,

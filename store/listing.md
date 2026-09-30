@@ -35,7 +35,7 @@ Glasslight is an independent project and is not affiliated with, endorsed by, or
 Restyles youtube.com with a frosted-glass interface and page-wide ambient light derived from the playing video, while keeping text legible.
 
 **Permission justifications**
-- `storage` — Saves the user's settings (on/off, light intensity, blur, contrast target, refraction, reduce transparency, performance mode, language).
+- `storage` — Saves the user's settings (on/off, light intensity, blur, glass opacity, contrast target, refraction, reduce transparency, performance mode, language).
 - Host permission `https://i.ytimg.com/*` — Reads YouTube thumbnail pixels (via the service worker) to colour the background when no video is playing. A page cannot read these pixels itself because the images are cross-origin.
 - Content scripts on `https://www.youtube.com/*` (including the live-chat frame) — Apply the glass styles and sample the playing video's frames locally for the ambient light and contrast calculation.
 

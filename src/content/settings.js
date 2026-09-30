@@ -5,6 +5,7 @@ LG.DEFAULTS = {
   enabled: true,
   intensity: 70, // ambient light strength, 0–100
   blur: 24, // glass frost radius in px
+  glassOpacity: 50, // glass tint, 0 near-clear → 50 designed → 100 opaque
   refraction: true, // SVG lensing on navigation glass (Chromium only)
   reduceTransparency: false,
   performance: false, // 15 fps sampling, no refraction

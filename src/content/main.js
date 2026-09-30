@@ -29,6 +29,7 @@
     html.classList.toggle('lg-perf', s.performance);
     html.classList.toggle('lg-refract', refractionOn());
     html.style.setProperty('--lg-blur', `${s.blur}px`);
+    html.style.setProperty('--lg-opacity', (s.glassOpacity / 100).toFixed(2));
     LG.refract.setBlur(s.blur);
     if (!refractionOn()) LG.refract.detachAll();
     if (!s.enabled) {

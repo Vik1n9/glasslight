@@ -11,7 +11,7 @@ collect, sell, or share personal data.
 |---|---|---|
 | Frames of the video you are watching | Downscaled to a few dozen pixels in memory to compute ambient-light colours and text contrast, then discarded. | **No** |
 | Video thumbnail images from `i.ytimg.com` | Fetched to pick colours for the background when no video is playing; reduced to 32×18 pixels in memory, cached only for the open tab. | Only the normal image request to YouTube's image server, the same one YouTube itself makes. |
-| Your settings (on/off, light intensity, blur, contrast target, refraction, reduce transparency, performance mode, language) | Stored with `chrome.storage.sync`. If Chrome Sync is on, Chrome syncs them across your signed-in browsers. | Only through Chrome Sync, controlled by your browser settings. |
+| Your settings (on/off, light intensity, blur, glass opacity, contrast target, refraction, reduce transparency, performance mode, language) | Stored with `chrome.storage.sync`. If Chrome Sync is on, Chrome syncs them across your signed-in browsers. | Only through Chrome Sync, controlled by your browser settings. |
 
 ## What the extension does not do
 
