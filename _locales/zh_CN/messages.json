@@ -15,8 +15,8 @@
   "optBlur": {
     "message": "玻璃模糊"
   },
-  "optGlassOpacity": {
-    "message": "玻璃不透明度"
+  "optTransparency": {
+    "message": "透明度"
   },
   "optContrast": {
     "message": "文字对比度目标"

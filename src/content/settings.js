@@ -5,7 +5,7 @@ LG.DEFAULTS = {
   enabled: true,
   intensity: 70, // ambient light strength, 0–100
   blur: 24, // glass frost radius in px
-  glassOpacity: 50, // glass tint, 0 near-clear → 50 designed → 100 opaque
+  transparency: 50, // 0 solid glass · 50 designed look · 100 immersive (see LG.immersion)
   refraction: true, // SVG lensing on navigation glass (Chromium only)
   reduceTransparency: false,
   performance: false, // 15 fps sampling, no refraction
@@ -26,7 +26,8 @@ LG.loadSettings = async () => {
   }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return;
-    for (const [key, { newValue }] of Object.entries(changes)) LG.settings[key] = newValue;
+    // A removed key (storage cleared, or synced away) falls back to its default.
+    for (const [key, { newValue }] of Object.entries(changes)) LG.settings[key] = newValue ?? LG.DEFAULTS[key];
     LG._settingListeners.forEach((fn) => fn(LG.settings));
   });
   return LG.settings;
@@ -35,3 +36,15 @@ LG.loadSettings = async () => {
 LG.prefersReducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 LG.prefersReducedTransparency = () => matchMedia('(prefers-reduced-transparency: reduce)').matches;
 LG.isDarkTheme = () => document.documentElement.hasAttribute('dark');
+
+// How far the Transparency slider is past its designed midpoint, 0–1: glass
+// turns into the Clear variant and the backdrop from a colour wash into the
+// footage itself. Reduce Transparency (either switch) turns it off; with
+// `motion` set, Reduce Motion does too — full-page moving footage is the
+// kind of large-area motion that setting exists to avoid.
+LG.immersion = (motion = false) => {
+  const s = LG.settings;
+  if (s.reduceTransparency || LG.prefersReducedTransparency()) return 0;
+  if (motion && LG.prefersReducedMotion()) return 0;
+  return Math.min(1, Math.max(0, (s.transparency - 50) / 50));
+};

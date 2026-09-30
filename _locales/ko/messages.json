@@ -15,8 +15,8 @@
   "optBlur": {
     "message": "유리 흐림"
   },
-  "optGlassOpacity": {
-    "message": "유리 불투명도"
+  "optTransparency": {
+    "message": "투명도"
   },
   "optContrast": {
     "message": "텍스트 대비 목표"

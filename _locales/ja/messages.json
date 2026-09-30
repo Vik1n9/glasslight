@@ -15,8 +15,8 @@
   "optBlur": {
     "message": "ガラスのぼかし"
   },
-  "optGlassOpacity": {
-    "message": "ガラスの不透明度"
+  "optTransparency": {
+    "message": "透明度"
   },
   "optContrast": {
     "message": "文字コントラストの目標"

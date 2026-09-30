@@ -3,11 +3,27 @@
 // behind all of YouTube. Frame scheduling via requestVideoFrameCallback,
 // letterbox cropping and hidden-tab pausing follow the approach of
 // WesselKroos/youtube-ambilight (MIT), heavily simplified.
+//
+// Past the Transparency midpoint (LG.immersion) the light turns into the
+// footage itself: a sharper, larger canvas, less blur and less temporal
+// smoothing. Legibility then comes from a scrim *map* rather than one scrim
+// value: every cell of a coarse grid gets the smallest scrim that keeps text
+// over it at the contrast target, so dark water stays vivid and only bright
+// shoals are dimmed.
 (() => {
-  const W = 96;
-  const H = 54;
-  const SAMPLE_W = 32;
-  const SAMPLE_H = 18;
+  // Display canvas: 96×54 colour wash at the midpoint, up to 384×216 fully
+  // immersive (see applyClarity). The glow keeps the small size.
+  let W = 96;
+  let H = 54;
+  const GW = 96;
+  const GH = 54;
+  const SAMPLE_W = 128; // stats sample of the display canvas (scrim map, tint):
+  // ~14 px of viewport each, fine enough to see a fish's real brightness
+  const SAMPLE_H = 72;
+  const PROBE_W = 32; // raw-frame probe (letterbox, DRM, brightness)
+  const PROBE_H = 18;
+  const GRID_X = 16; // scrim map cells over the viewport
+  const GRID_Y = 9;
   const STATS_MS = 250;
 
   let root;
@@ -24,6 +40,11 @@
   let glowKey = '';
   let glowClip; // screen-space clip so the glow never half-covers side panels
   let glassAlpha = 0;
+  let clarity = 0; // LG.immersion(true) applied to the canvases
+  let scrimMap; // GRID_X × GRID_Y canvas, stretched over the viewport
+  let smctx;
+  let scrimImg;
+  let stillShown = false; // display holds a thumbnail, not video
 
   // Glow margin around the player, px. Portrait players (Shorts) have empty
   // space beside them, so their halo spreads wider.
@@ -59,11 +80,16 @@
     dctx = display.getContext('2d', { alpha: false });
     dctx.fillStyle = LG.isDarkTheme() ? '#0f0f0f' : '#f9f9fa';
     dctx.fillRect(0, 0, W, H);
-    const scrim = document.createElement('div');
-    scrim.id = 'lg-scrim';
+    scrimMap = document.createElement('canvas');
+    scrimMap.width = GRID_X;
+    scrimMap.height = GRID_Y;
+    scrimMap.id = 'lg-scrim';
+    smctx = scrimMap.getContext('2d');
+    scrimImg = smctx.createImageData(GRID_X, GRID_Y);
+    shownScrim.fill(-1);
     glow = document.createElement('canvas');
-    glow.width = W;
-    glow.height = H;
+    glow.width = GW;
+    glow.height = GH;
     glow.id = 'lg-glow';
     gctx = glow.getContext('2d', { alpha: false });
     // The glow sits in an untransformed full-viewport wrapper so it can be
@@ -71,19 +97,43 @@
     glowClip = document.createElement('div');
     glowClip.id = 'lg-glow-clip';
     glowClip.append(glow);
-    root.append(display, scrim, glowClip);
+    root.append(display, scrimMap, glowClip);
     (document.body || document.documentElement).prepend(root);
 
     sample = new OffscreenCanvas(SAMPLE_W, SAMPLE_H);
     sctx = sample.getContext('2d', { willReadFrequently: true });
+    // Average (not point-sample) the sharper immersive canvas, so a shoal
+    // counts with its real area.
+    sctx.imageSmoothingQuality = 'high';
     // Two steps on purpose: drawing the video straight into a
     // willReadFrequently (CPU) canvas reads the full-resolution frame back
     // from the GPU (~15 ms for 4K), while getImageData on a GPU canvas trips
     // Chrome's readback warning. Scale on the GPU, then copy 32×18 to CPU.
-    probe = new OffscreenCanvas(SAMPLE_W, SAMPLE_H);
+    probe = new OffscreenCanvas(PROBE_W, PROBE_H);
     pctx = probe.getContext('2d');
-    probeRead = new OffscreenCanvas(SAMPLE_W, SAMPLE_H);
+    probeRead = new OffscreenCanvas(PROBE_W, PROBE_H);
     prctx = probeRead.getContext('2d', { willReadFrequently: true });
+    clarity = -1;
+    applyClarity();
+  }
+
+  // Resize the display canvas and retune the blur for the current immersion.
+  function applyClarity() {
+    const k = LG.immersion(true);
+    if (k === clarity) return;
+    clarity = k;
+    const w = Math.round((96 + 288 * k) / 16) * 16; // 96…384, keeps 16:9 exact
+    if (w !== W) {
+      W = w;
+      H = (w * 9) / 16;
+      display.width = W; // clears it
+      display.height = H;
+      dctx.fillStyle = LG.isDarkTheme() ? '#0f0f0f' : '#f9f9fa';
+      dctx.fillRect(0, 0, W, H);
+      if (stillShown) drawStill(1);
+      else if (videoLive()) drawOnce();
+    }
+    root.style.setProperty('--lg-ambient-blur', `${(18 - 15 * k).toFixed(1)}px`);
   }
 
   // ---- video source --------------------------------------------------------
@@ -96,13 +146,46 @@
     const sy = crop.y * vh;
     const sw = crop.w * vw;
     const sh = crop.h * vh;
-    dctx.globalAlpha = LG.prefersReducedMotion() ? 0.08 : 0.22; // temporal smoothing
-    dctx.filter = 'blur(2px) saturate(1.35)';
+    // Temporal smoothing; immersive footage keeps less of the previous frame
+    // so a moving shoal does not smear.
+    const alpha = LG.prefersReducedMotion() ? 0.08 : 0.22 + 0.33 * clarity;
+    const filter = clarity ? `blur(${(2 - 1.4 * clarity).toFixed(2)}px) saturate(1.35)` : 'blur(2px) saturate(1.35)';
+    // Immersive, keep the footage's proportions: crop to cover the canvas
+    // rather than stretch (a Short stretched to 16:9 turns every fish into a
+    // smear). Eased in with the immersion, so the midpoint wash is unchanged.
+    let cx = sx;
+    let cy = sy;
+    let cw = sw;
+    let ch = sh;
+    if (clarity) {
+      const want = W / H;
+      if (sw / sh < want) {
+        ch = sh + (sw / want - sh) * clarity;
+        cy += (sh - ch) / 2;
+      } else {
+        cw = sw + (sh * want - sw) * clarity;
+        cx += (sw - cw) / 2;
+      }
+    }
     // Slight overscan so the blurred edges do not fade to black.
-    dctx.drawImage(video, sx, sy, sw, sh, -6, -4, W + 12, H + 8);
+    const ox = W / 16;
+    const oy = H / 13.5;
+    dctx.globalAlpha = alpha;
+    dctx.filter = filter;
+    dctx.drawImage(video, cx, cy, cw, ch, -ox, -oy, W + ox * 2, H + oy * 2);
     dctx.filter = 'none';
     dctx.globalAlpha = 1;
-    gctx.drawImage(display, 0, 0);
+    stillShown = false;
+    if (!clarity) {
+      gctx.drawImage(display, 0, 0, GW, GH);
+      return;
+    }
+    // The glow frames the player, so it keeps the whole picture.
+    gctx.globalAlpha = alpha;
+    gctx.filter = 'saturate(1.35)';
+    gctx.drawImage(video, sx, sy, sw, sh, -GW / 16, -GH / 13.5, GW + GW / 8, GH + GH / 6.75);
+    gctx.filter = 'none';
+    gctx.globalAlpha = 1;
   }
 
   // Keep the glow canvas scaled onto the player's on-screen rect.
@@ -120,8 +203,8 @@
     const side = r.height > r.width ? GLOW_SIDE_PORTRAIT : GLOW_SIDE;
     const w = r.width + side * 2;
     const h = r.height + GLOW_TOP + GLOW_BOTTOM;
-    const sx = w / W;
-    glow.style.transform = `translate(${r.left - side}px, ${r.top - GLOW_TOP}px) scale(${sx}, ${h / H})`;
+    const sx = w / GW;
+    glow.style.transform = `translate(${r.left - side}px, ${r.top - GLOW_TOP}px) scale(${sx}, ${h / GH})`;
     // The blur runs in canvas pixels before scaling; size it for the screen.
     glow.style.filter = `blur(${(GLOW_EDGE_PX / sx).toFixed(2)}px) saturate(1.6) brightness(var(--lg-glow-lift, 1))`;
     // Masks live on the full-viewport wrapper, never on the glow itself: a
@@ -264,9 +347,9 @@
     if (!videoLive() || !video.videoWidth) return;
     let px;
     try {
-      pctx.drawImage(video, 0, 0, SAMPLE_W, SAMPLE_H);
+      pctx.drawImage(video, 0, 0, PROBE_W, PROBE_H);
       prctx.drawImage(probe, 0, 0);
-      px = prctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
+      px = prctx.getImageData(0, 0, PROBE_W, PROBE_H).data;
     } catch {
       blockVideo();
       return;
@@ -274,18 +357,18 @@
 
     const dark = (o) => px[o] < 14 && px[o + 1] < 14 && px[o + 2] < 14;
     const rowDark = (y) => {
-      for (let x = 0; x < SAMPLE_W; x += 1) if (!dark((y * SAMPLE_W + x) * 4)) return false;
+      for (let x = 0; x < PROBE_W; x += 1) if (!dark((y * PROBE_W + x) * 4)) return false;
       return true;
     };
     const colDark = (x) => {
-      for (let y = 0; y < SAMPLE_H; y += 1) if (!dark((y * SAMPLE_W + x) * 4)) return false;
+      for (let y = 0; y < PROBE_H; y += 1) if (!dark((y * PROBE_W + x) * 4)) return false;
       return true;
     };
 
     // All black while playing for ~8s → protected content (or a very long
     // black scene, where the thumbnail is a fine substitute anyway).
     let allDark = true;
-    for (let y = 0; y < SAMPLE_H && allDark; y += 1) allDark = rowDark(y);
+    for (let y = 0; y < PROBE_H && allDark; y += 1) allDark = rowDark(y);
     if (allDark && !video.paused && video.currentTime > 2) {
       blackTicks += 1;
       if (blackTicks > 8000 / (STATS_MS * 2)) blockVideo(); // analysed every 2nd tick
@@ -296,22 +379,22 @@
 
     // Letterbox / pillarbox detection (max 25% per side).
     let top = 0;
-    while (top < SAMPLE_H * 0.25 && rowDark(top)) top += 1;
+    while (top < PROBE_H * 0.25 && rowDark(top)) top += 1;
     let bottom = 0;
-    while (bottom < SAMPLE_H * 0.25 && rowDark(SAMPLE_H - 1 - bottom)) bottom += 1;
+    while (bottom < PROBE_H * 0.25 && rowDark(PROBE_H - 1 - bottom)) bottom += 1;
     let left = 0;
-    while (left < SAMPLE_W * 0.25 && colDark(left)) left += 1;
+    while (left < PROBE_W * 0.25 && colDark(left)) left += 1;
     let right = 0;
-    while (right < SAMPLE_W * 0.25 && colDark(SAMPLE_W - 1 - right)) right += 1;
+    while (right < PROBE_W * 0.25 && colDark(PROBE_W - 1 - right)) right += 1;
     crop = {
-      x: left / SAMPLE_W,
-      y: top / SAMPLE_H,
-      w: (SAMPLE_W - left - right) / SAMPLE_W,
-      h: (SAMPLE_H - top - bottom) / SAMPLE_H,
+      x: left / PROBE_W,
+      y: top / PROBE_H,
+      w: (PROBE_W - left - right) / PROBE_W,
+      h: (PROBE_H - top - bottom) / PROBE_H,
     };
 
     // Clear-glass player controls need a dimming layer over bright footage.
-    const bottomLum = LG.contrast.bandLuminance(px, SAMPLE_W, Math.floor(SAMPLE_H * 0.7), SAMPLE_H);
+    const bottomLum = LG.contrast.bandLuminance(px, PROBE_W, Math.floor(PROBE_H * 0.7), PROBE_H);
     document.documentElement.classList.toggle('lg-video-bright', bottomLum > 0.42);
   }
 
@@ -331,15 +414,140 @@
     const duration = LG.prefersReducedMotion() ? 1 : 1400;
     const step = (now) => {
       const t = Math.min(1, (now - start) / duration);
-      dctx.globalAlpha = t >= 1 ? 1 : 0.07;
-      // Thumbnails are busier and duller than moving footage: push colour harder.
-      dctx.filter = 'blur(3px) saturate(1.9) brightness(1.1)';
-      dctx.drawImage(still, -6, -4, W + 12, H + 8);
-      dctx.filter = 'none';
-      dctx.globalAlpha = 1;
+      drawStill(t >= 1 ? 1 : 0.07);
       if (t < 1) fadeRaf = requestAnimationFrame(step);
     };
     fadeRaf = requestAnimationFrame(step);
+  }
+
+  function drawStill(alpha) {
+    stillShown = true;
+    dctx.globalAlpha = alpha;
+    // Thumbnails are busier and duller than moving footage: push colour
+    // harder. The source is only 32×18, so the blur scales with the canvas
+    // and a thumbnail stays a soft wash even when immersive.
+    dctx.filter = `blur(${((3 * W) / 96).toFixed(1)}px) saturate(1.9) brightness(1.1)`;
+    dctx.drawImage(still, -W / 16, -H / 13.5, W + W / 8, H + H / 6.75);
+    dctx.filter = 'none';
+    dctx.globalAlpha = 1;
+  }
+
+  // ---- scrim map ------------------------------------------------------------
+
+  // Stats samples per viewport cell. The display canvas box is inset -6% and
+  // 112% large; samples beyond the viewport count for the edge cells, where
+  // the drift animation can carry them.
+  const cellSamples = (() => {
+    const cellOf = (i, n, grid) =>
+      Math.min(grid - 1, Math.max(0, Math.floor((-0.06 + (1.12 * (i + 0.5)) / n) * grid)));
+    const cells = Array.from({ length: GRID_X * GRID_Y }, () => []);
+    for (let y = 0; y < SAMPLE_H; y += 1) {
+      for (let x = 0; x < SAMPLE_W; x += 1) {
+        cells[cellOf(y, SAMPLE_H, GRID_Y) * GRID_X + cellOf(x, SAMPLE_W, GRID_X)].push(y * SAMPLE_W + x);
+      }
+    }
+    return cells;
+  })();
+  const cellPx = cellSamples.map((idx) => new Uint8ClampedArray(idx.length * 4));
+  const rawScrim = new Float32Array(GRID_X * GRID_Y);
+  const cellScrim = new Float32Array(GRID_X * GRID_Y); // dilated + smoothed
+  const shownScrim = new Float32Array(GRID_X * GRID_Y); // what the canvas shows
+  let scrimRaf = 0;
+  let scrimDark = null;
+
+  function solveScrimMap(px, opacity, dark) {
+    // Per cell there is no page-wide worst case to hide model error behind
+    // (glass shadows, the ¼ s between ticks, the drift): keep 5 % in hand.
+    const target = LG.settings.contrastTarget * 1.05;
+    for (let c = 0; c < cellSamples.length; c += 1) {
+      const idx = cellSamples[c];
+      const buf = cellPx[c];
+      for (let i = 0; i < idx.length; i += 1) {
+        const o = idx[i] * 4;
+        buf[i * 4] = px[o];
+        buf[i * 4 + 1] = px[o + 1];
+        buf[i * 4 + 2] = px[o + 2];
+      }
+      rawScrim[c] = LG.contrast.solveScrim(buf, opacity, dark, target);
+    }
+    // Dilate by one cell: the drift animation and the bilinear stretch of
+    // the map must never leave a bright spot under a lighter neighbour.
+    // Then smooth asymmetrically: darken (safer) at once, relax slowly.
+    for (let y = 0; y < GRID_Y; y += 1) {
+      for (let x = 0; x < GRID_X; x += 1) {
+        let m = 0;
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            const yy = y + dy;
+            const xx = x + dx;
+            if (yy >= 0 && yy < GRID_Y && xx >= 0 && xx < GRID_X) m = Math.max(m, rawScrim[yy * GRID_X + xx]);
+          }
+        }
+        const c = y * GRID_X + x;
+        cellScrim[c] = m > cellScrim[c] ? m : cellScrim[c] + (m - cellScrim[c]) * 0.15;
+      }
+    }
+  }
+
+  // ---- masthead glass floor --------------------------------------------------
+
+  // Sample rows under the masthead (viewport y 0–8 %, canvas inset -6 %) and
+  // the frame's top rows, which the player glow lays under it.
+  const MAST_ROWS = [Math.floor((0.06 / 1.12) * SAMPLE_H), Math.ceil((0.14 / 1.12) * SAMPLE_H)];
+  const GLOW_ROWS = Math.round(SAMPLE_H * 0.22);
+  const mastPx = new Uint8ClampedArray(SAMPLE_W * 4);
+
+  // Smallest glass tint that keeps masthead text at the target over what is
+  // really behind it: ambient light → scrim map → player glow. Clear glass
+  // thus stays clear over dark water and tints only as much as it must.
+  // (The signed-out "Sign in" link blue is weaker still; glass.css gives
+  // that one capsule its own fill rather than tinting the whole bar.)
+  function mastheadFloor(px, opacity, glowOpacity, dark) {
+    const { base } = dark ? LG.contrast.THEMES.dark : LG.contrast.THEMES.light;
+    const L = LG.contrast.luminance;
+    // Worst pixel of a column: brightest on a dark page, darkest on a light one.
+    const worse = (o1, o2) => ((L(px[o1], px[o1 + 1], px[o1 + 2]) > L(px[o2], px[o2 + 1], px[o2 + 2])) === dark ? o1 : o2);
+    for (let x = 0; x < SAMPLE_W; x += 1) {
+      let a = MAST_ROWS[0] * SAMPLE_W * 4 + x * 4;
+      for (let y = MAST_ROWS[0] + 1; y <= MAST_ROWS[1]; y += 1) a = worse(a, (y * SAMPLE_W + x) * 4);
+      let g = x * 4;
+      for (let y = 1; y < GLOW_ROWS; y += 1) g = worse(g, (y * SAMPLE_W + x) * 4);
+      const cell = Math.min(GRID_X - 1, Math.max(0, Math.floor((-0.06 + (1.12 * (x + 0.5)) / SAMPLE_W) * GRID_X)));
+      const scrim = cellScrim[cell];
+      for (let ch = 0; ch < 3; ch += 1) {
+        let v = base[ch] + (px[a + ch] - base[ch]) * opacity;
+        v += (base[ch] - v) * scrim;
+        v += (px[g + ch] - v) * glowOpacity;
+        mastPx[x * 4 + ch] = v;
+      }
+    }
+    return LG.contrast.solveScrim(mastPx, 1, dark, LG.settings.contrastTarget);
+  }
+
+  // Ease the canvas to the new map over ~¼ s (the tick interval).
+  function paintScrim(dark) {
+    let changed = dark !== scrimDark;
+    for (let c = 0; c < cellScrim.length && !changed; c += 1) changed = Math.abs(cellScrim[c] - shownScrim[c]) > 0.004;
+    if (!changed) return;
+    scrimDark = dark;
+    const [r, g, b] = dark ? LG.contrast.THEMES.dark.base : LG.contrast.THEMES.light.base;
+    const from = shownScrim.slice();
+    const t0 = performance.now();
+    const d = scrimImg.data;
+    cancelAnimationFrame(scrimRaf);
+    const step = (now) => {
+      const f = from[0] < 0 || LG.prefersReducedMotion() ? 1 : Math.min(1, (now - t0) / 240);
+      for (let c = 0; c < cellScrim.length; c += 1) {
+        shownScrim[c] = f === 1 ? cellScrim[c] : from[c] + (cellScrim[c] - from[c]) * f;
+        d[c * 4] = r;
+        d[c * 4 + 1] = g;
+        d[c * 4 + 2] = b;
+        d[c * 4 + 3] = Math.round(shownScrim[c] * 255);
+      }
+      smctx.putImageData(scrimImg, 0, 0);
+      if (f < 1) scrimRaf = requestAnimationFrame(step);
+    };
+    step(t0);
   }
 
   // ---- stats → CSS variables (legibility + light spill) --------------------
@@ -350,19 +558,21 @@
     if (!active()) return;
     // Letterbox / brightness / DRM checks don't need 4 Hz.
     if ((tickCount += 1) % 2 === 0) analyseRawFrame();
+    // Sample what the page shows: #lg-ambient-canvas has saturate(1.5).
+    sctx.filter = 'saturate(1.5)';
     sctx.drawImage(display, 0, 0, SAMPLE_W, SAMPLE_H);
+    sctx.filter = 'none';
     const px = sctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
     const dark = LG.isDarkTheme();
     const opacity = ambientOpacity();
-    const scrim = LG.contrast.smoothScrim(
-      LG.contrast.solveScrim(px, opacity, dark, LG.settings.contrastTarget),
-    );
+    solveScrimMap(px, opacity, dark);
     const { rgb, lum } = LG.contrast.dominantColor(px);
 
     // Navigation glass floats over the unscrimmed glow (masthead sits on its
-    // top rows). Solve its tint density the same way, with some headroom for
-    // the saturate() in the glass backdrop-filter.
-    let glowOpacity = videoLive() ? opacity * 0.85 : 0;
+    // top rows); mastheadFloor solves its tint. Immersive, the backdrop
+    // already is the footage: the glow steps back, which also frees the
+    // Clear glass from the tint floor it would force.
+    let glowOpacity = videoLive() ? opacity * 0.85 * (1 - 0.8 * clarity) : 0;
     // On a light page a dark frame's glow reads as a shadow, not light:
     // lift mid-dark footage so it stays colourful, and fade the glow out as
     // the frame approaches black (brightness can't lift black).
@@ -372,11 +582,9 @@
       glowOpacity *= t * t * (3 - 2 * t); // smoothstep
       glowLift = 1 + 0.8 * (1 - Math.min(1, lum / 0.3));
     }
-    let glass = 0;
-    if (glowOpacity > 0) {
-      const top = px.subarray(0, SAMPLE_W * 4 * 4); // top 4 rows
-      glass = Math.min(0.92, LG.contrast.solveScrim(top, glowOpacity, dark, LG.settings.contrastTarget) + 0.08);
-    }
+    // Headroom for the saturate() in the glass backdrop-filter.
+    const floor = mastheadFloor(px, opacity, glowOpacity, dark);
+    const glass = floor > 0 ? Math.min(0.92, floor + 0.08) : 0;
     glassAlpha = glass > glassAlpha ? glass : glassAlpha + (glass - glassAlpha) * 0.15;
 
     // Read layout before any write below: a write followed by a layout read
@@ -384,12 +592,12 @@
     placeGlow();
 
     // Light-layer values live on #lg-ambient: changing them restyles only
-    // its three children, not the whole page.
+    // its three children, not the whole page. The scrim is a canvas.
+    paintScrim(dark);
     const a = root.style;
     setVar(a, '--lg-ambient-opacity', opacity.toFixed(2));
     setVar(a, '--lg-glow-opacity', glowOpacity.toFixed(2));
     setVar(a, '--lg-glow-lift', glowLift.toFixed(2));
-    setVar(a, '--lg-scrim', scrim.toFixed(2));
     // Values the glass surfaces read go into one rule that matches only the
     // glass elements (see liveRule): an inherited custom property changed on
     // <html> would restyle the entire document every tick. Quantized so an
@@ -439,6 +647,7 @@
   function start(opts = {}) {
     onBlocked = opts.onBlocked || onBlocked;
     mount();
+    applyClarity();
     clearInterval(statsTimer);
     statsTimer = setInterval(tick, STATS_MS);
     tick();
@@ -448,6 +657,7 @@
     unbindVideo();
     clearInterval(statsTimer);
     cancelAnimationFrame(fadeRaf);
+    cancelAnimationFrame(scrimRaf);
     root?.remove();
     root = null;
     glow = null;
