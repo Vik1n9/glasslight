@@ -107,12 +107,5 @@
     return n ? sum / n : 0;
   }
 
-  // Asymmetric smoothing: get darker (safer) fast, relax slowly.
-  let current = 0;
-  const smoothScrim = (next) => {
-    current = next > current ? next : current + (next - current) * 0.15;
-    return current;
-  };
-
-  LG.contrast = { luminance, ratio, solveScrim, dominantColor, bandLuminance, smoothScrim, THEMES };
+  LG.contrast = { luminance, ratio, solveScrim, dominantColor, bandLuminance, THEMES };
 })();

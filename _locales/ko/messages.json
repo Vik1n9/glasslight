@@ -15,6 +15,9 @@
   "optBlur": {
     "message": "유리 흐림"
   },
+  "optTransparency": {
+    "message": "투명도"
+  },
   "optContrast": {
     "message": "텍스트 대비 목표"
   },

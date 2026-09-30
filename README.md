@@ -17,11 +17,27 @@ legible.
 | Navigation | masthead, chip bar, menus, drawer | Regular glass: frost + refraction + specular rim + adaptive shadow |
 | Over media | player controls, Shorts actions | Clear glass, 35% dimming layer over bright footage |
 
-**Legibility.** Text is never made translucent. Every 250 ms `contrast.js`
-solves the smallest scrim alpha that keeps the *worst* sampled pixel at the
-target WCAG contrast (default 4.5:1) against the weakest text colour, and does
-the same for the navigation glass tint over the player glow. Secondary text is
-raised (vibrancy) so the light can stay brighter at equal contrast.
+**Transparency.** One slider spans the material. At 50 % (default) it is the
+designed look: Regular glass over a colour wash of the video. Towards 0 the
+glass thickens (denser tint, heavier frost). Towards 100 it becomes the
+Clear variant and the backdrop
+turns from a wash into the footage itself (sharper, larger canvas, less
+blur, proportions kept), so a reef video fills the whole page with fish
+while the glass lenses them. Neither end stops being glass: the tint stays
+between 0.12 and 0.88, frost never drops under 8 px, light keeps spilling
+in, and the rim brightens as the tint thins. Reduce Transparency pins it at
+50 %; Reduce Motion keeps the backdrop a wash.
+
+**Legibility.** Text is never made translucent. Every 250 ms `ambient.js`
+solves a *scrim map*: for each cell of a 16×9 grid, `contrast.js` finds the
+smallest scrim alpha that keeps the worst sampled pixel there at the target
+WCAG contrast (default 4.5:1) against the weakest text colour, with 5 %
+headroom (10 % for sharp immersive footage); the map is dilated by a cell and stretched smoothly over the page.
+Dark water stays vivid, only bright shoals are dimmed. The masthead's glass
+tint is solved the same way over what is really behind it (ambient → scrim
+map → player glow). Secondary text is raised (vibrancy) so the light can stay
+brighter at equal contrast, including YouTube's hashed design tokens, which
+are found by value in its stylesheets.
 
 ## Languages
 
@@ -61,7 +77,7 @@ Chrome's 132-character limit. Store texts, privacy answers and assets live in
 src/content/settings.js   shared namespace + chrome.storage.sync settings
 src/content/contrast.js   WCAG luminance/contrast, scrim solver, dominant colour
 src/content/refract.js    SVG displacement maps (SDF of a rounded rect) as backdrop-filter
-src/content/ambient.js    video → canvas light, glow, letterbox/DRM detection, CSS vars
+src/content/ambient.js    video → canvas light, glow, scrim map, letterbox/DRM detection
 src/content/thumbs.js     thumbnail colour for browse pages (via the service worker)
 src/content/main.js       routing (yt-navigate-finish), decoration, pointer highlight
 src/styles/glass.css      all visual rules, scoped to html.lg-on

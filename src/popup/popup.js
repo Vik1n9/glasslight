@@ -2,6 +2,7 @@ const DEFAULTS = {
   enabled: true,
   intensity: 70,
   blur: 24,
+  transparency: 50,
   refraction: true,
   reduceTransparency: false,
   performance: false,
@@ -11,6 +12,7 @@ const DEFAULTS = {
 const format = {
   intensity: (v) => `${v}%`,
   blur: (v) => `${v}px`,
+  transparency: (v) => `${v}%`,
   contrastTarget: (v) => `${Number(v).toFixed(1)}:1`,
 };
 

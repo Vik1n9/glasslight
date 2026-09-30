@@ -14,19 +14,20 @@
 html.lg-on {
   --lg-base: 249 249 250;
   --lg-glass-rgb: 250 250 252;
-  --lg-glass-alpha: 0.46;
-  --lg-glass-alpha-scrolled: 0.72;
-  --lg-menu-alpha: 0.78;
+  --lg-glass-base: 0.46;
+  --lg-glass-base-scrolled: 0.72;
+  --lg-menu-base: 0.78;
+  --lg-shelf-base: 0.6;
   --lg-fill-rgb: 0 0 0;
   --lg-fill-alpha: 0.05;
   --lg-fill-alpha-hover: 0.09;
   --lg-rim: 255 255 255;
-  --lg-rim-alpha: 0.75;
+  --lg-rim-base: 0.75;
   --lg-shadow-rgb: 20 24 40;
   --lg-shadow-alpha: 0.1;
   --lg-shadow-alpha-scrolled: 0.2;
   --lg-tint-rgb: 128 128 128;
-  --lg-spill: 0.1;
+  --lg-spill-base: 0.1;
   --lg-spec-angle: 135deg;
   --lg-blur: 24px;
   --lg-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -38,17 +39,41 @@ html.lg-on {
 html.lg-on[dark] {
   --lg-base: 15 15 15;
   --lg-glass-rgb: 28 28 30;
-  --lg-glass-alpha: 0.38;
-  --lg-glass-alpha-scrolled: 0.64;
-  --lg-menu-alpha: 0.74;
+  --lg-glass-base: 0.38;
+  --lg-glass-base-scrolled: 0.64;
+  --lg-menu-base: 0.74;
   --lg-fill-rgb: 255 255 255;
   --lg-fill-alpha: 0.07;
   --lg-fill-alpha-hover: 0.12;
-  --lg-rim-alpha: 0.38;
+  --lg-rim-base: 0.38;
   --lg-shadow-rgb: 0 0 0;
   --lg-shadow-alpha: 0.25;
   --lg-shadow-alpha-scrolled: 0.5;
-  --lg-spill: 0.14;
+  --lg-spill-base: 0.14;
+}
+
+/* Transparency (popup slider → --lg-transparency, 0–1; ambient.js and
+   main.js read the same setting). 0.5 is the designed look. Towards 0
+   ("solid") the glass thickens: tints rise and main.js frosts harder.
+   Towards 1 ("immerse") it becomes the Clear variant, so the footage behind
+   reads as itself. Neither end stops being glass: tints stay within
+   [--lg-tint-floor, --lg-tint-cap] (never opaque, never gone), light still
+   spills in, the rim brightens as the tint thins, and lensing and frost
+   stay on. Legibility over the footage comes from the backdrop's scrim map
+   and --lg-glass-live, not from the tint. Glass over scrolled content keeps
+   a denser floor (Apple's scroll edge effect): text under text is never
+   clear. Menus float over arbitrary content and stay denser still. */
+html.lg-on {
+  --lg-tint-floor: 0.12;
+  --lg-tint-cap: 0.88;
+  --lg-solid: clamp(0, (0.5 - var(--lg-transparency, 0.5)) * 2, 1);
+  --lg-immerse: clamp(0, (var(--lg-transparency, 0.5) - 0.5) * 2, 1);
+  --lg-glass-alpha: calc(var(--lg-glass-base) + (var(--lg-tint-cap) - var(--lg-glass-base)) * var(--lg-solid) - (var(--lg-glass-base) - var(--lg-tint-floor)) * var(--lg-immerse));
+  --lg-glass-alpha-scrolled: calc(var(--lg-glass-base-scrolled) + (0.9 - var(--lg-glass-base-scrolled)) * var(--lg-solid) - (var(--lg-glass-base-scrolled) - 0.4) * var(--lg-immerse));
+  --lg-menu-alpha: calc(var(--lg-menu-base) + (0.92 - var(--lg-menu-base)) * var(--lg-solid) - (var(--lg-menu-base) - 0.5) * var(--lg-immerse));
+  --lg-shelf-alpha: calc(var(--lg-shelf-base) + (var(--lg-tint-cap) - var(--lg-shelf-base)) * var(--lg-solid) - (var(--lg-shelf-base) - var(--lg-tint-floor)) * var(--lg-immerse));
+  --lg-spill: calc(var(--lg-spill-base) * (1 - 0.4 * var(--lg-immerse)));
+  --lg-rim-alpha: min(1, calc(var(--lg-rim-base) * (1 + 0.4 * var(--lg-immerse))));
 }
 
 /* Vibrancy: secondary labels get more luminous over the lit backdrop so the
@@ -87,7 +112,8 @@ html:not(.lg-on) #lg-ambient {
   width: 112%;
   height: 112%;
   opacity: var(--lg-ambient-opacity, 0.4);
-  filter: blur(18px) saturate(1.5);
+  /* 18px colour wash at the Transparency midpoint, down to 3px immersive. */
+  filter: blur(var(--lg-ambient-blur, 18px)) saturate(1.5);
   transition: opacity 0.6s var(--lg-ease);
   animation: lg-drift 48s ease-in-out infinite alternate;
   will-change: transform;
@@ -98,13 +124,14 @@ html:not(.lg-on) #lg-ambient {
   to   { transform: scale(1.06) translate3d(-1.5%, 1%, 0); }
 }
 
-/* Legibility scrim: alpha solved per tick by contrast.js. */
+/* Legibility scrim map: a 16×9 canvas of base-colour alphas, one per cell,
+   each solved by contrast.js (ambient.js). The bilinear stretch blends the
+   cells into a smooth field. */
 #lg-scrim {
   position: absolute;
   inset: 0;
-  background: rgb(var(--lg-base));
-  opacity: var(--lg-scrim, 0.7);
-  transition: opacity 0.35s linear;
+  width: 100%;
+  height: 100%;
 }
 
 /* Player glow: the frame radiating from behind the player, above the scrim.
@@ -303,6 +330,13 @@ html.lg-on .lg-glass .ytSearchboxComponentSearchButton {
   backdrop-filter: none !important;
 }
 
+/* Signed-out "Sign in": its link blue is the weakest text on the masthead,
+   so that one capsule carries a dense fill of its own instead of tinting
+   the whole bar, which stays Clear when immersive. */
+html.lg-on .lg-glass a[href*="ServiceLogin"] {
+  background: rgb(var(--lg-glass-rgb) / 0.82) !important;
+}
+
 /* Channel page tab bar (sticky under the masthead): a glass capsule. */
 html.lg-on ytd-tabbed-page-header #tabs-inner-container.lg-glass {
   --lg-radius: 24px;
@@ -348,8 +382,8 @@ html.lg-on tp-yt-app-drawer#guide[opened] #contentContainer {
   background:
     linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
     rgb(var(--lg-glass-rgb) / var(--lg-menu-alpha)) !important;
-  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(180%);
-  backdrop-filter: blur(var(--lg-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--lg-blur-full, var(--lg-blur))) saturate(180%);
+  backdrop-filter: blur(var(--lg-blur-full, var(--lg-blur))) saturate(180%);
   border-radius: 0 var(--lg-radius) var(--lg-radius) 0;
 }
 
@@ -370,8 +404,8 @@ html.lg-on yt-notification-action-renderer tp-yt-paper-toast {
   background:
     linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
     rgb(var(--lg-glass-rgb) / var(--lg-menu-alpha)) !important;
-  -webkit-backdrop-filter: blur(calc(var(--lg-blur) * 1.25)) saturate(180%) !important;
-  backdrop-filter: blur(calc(var(--lg-blur) * 1.25)) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(calc(var(--lg-blur-full, var(--lg-blur)) * 1.25)) saturate(180%) !important;
+  backdrop-filter: blur(calc(var(--lg-blur-full, var(--lg-blur)) * 1.25)) saturate(180%) !important;
   border: 0 !important;
   border-radius: 22px !important;
   box-shadow:
@@ -467,8 +501,8 @@ html.lg-on .ytdMiniplayerComponentContent {
   background:
     linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
     rgb(var(--lg-glass-rgb) / var(--lg-menu-alpha)) !important;
-  -webkit-backdrop-filter: blur(calc(var(--lg-blur) * 1.25)) saturate(180%) !important;
-  backdrop-filter: blur(calc(var(--lg-blur) * 1.25)) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(calc(var(--lg-blur-full, var(--lg-blur)) * 1.25)) saturate(180%) !important;
+  backdrop-filter: blur(calc(var(--lg-blur-full, var(--lg-blur)) * 1.25)) saturate(180%) !important;
   border-radius: 22px !important;
   overflow: hidden !important;
   box-shadow:
@@ -549,7 +583,7 @@ html.lg-on .expand-collapse-button button.ytSpecButtonShapeNextHost,
 html.lg-on .ytd-rich-shelf-renderer .expand-collapse-button button {
   background:
     linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
-    rgb(var(--lg-glass-rgb) / max(var(--lg-glass-alpha), 0.6)) !important;
+    rgb(var(--lg-glass-rgb) / var(--lg-shelf-alpha)) !important;
   -webkit-backdrop-filter: blur(calc(var(--lg-blur) * 0.6)) saturate(180%) !important;
   backdrop-filter: blur(calc(var(--lg-blur) * 0.6)) saturate(180%) !important;
   border: 0 !important;
@@ -660,9 +694,9 @@ html.lg-on.lg-reduce-transparency ytd-multi-page-menu-renderer {
 /* Increase Contrast: visible borders, denser tint. */
 @media (prefers-contrast: more) {
   html.lg-on {
-    --lg-glass-alpha: 0.8;
-    --lg-glass-alpha-scrolled: 0.9;
-    --lg-menu-alpha: 0.94;
+    --lg-glass-base: 0.8;
+    --lg-glass-base-scrolled: 0.9;
+    --lg-menu-base: 0.94;
   }
 
   html.lg-on .lg-glass,
@@ -693,5 +727,5 @@ html.lg-on.lg-reduce-transparency ytd-multi-page-menu-renderer {
 /* Performance mode: no drift, cheaper blur. */
 html.lg-perf #lg-ambient-canvas {
   animation: none;
-  filter: blur(10px);
+  filter: blur(min(10px, var(--lg-ambient-blur, 18px)));
 }

@@ -15,6 +15,9 @@
   "optBlur": {
     "message": "Desenfoque del cristal"
   },
+  "optTransparency": {
+    "message": "Transparencia"
+  },
   "optContrast": {
     "message": "Contraste objetivo del texto"
   },

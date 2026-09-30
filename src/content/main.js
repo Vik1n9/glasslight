@@ -19,6 +19,23 @@
     return document.querySelector('#movie_player video.html5-main-video');
   }
 
+  // Towards solid the glass frosts harder (thicker glass); Clear glass frosts
+  // less so the footage behind stays recognisable, but never under 8 px, so
+  // it still reads as glass. Over scrolled content the frost is full
+  // (scroll edge effect).
+  let frost = '';
+  const fullFrost = (s) => s.blur * (1 + 0.25 * Math.max(0, (50 - s.transparency) / 50));
+  function applyFrost() {
+    const s = LG.settings;
+    const full = fullFrost(s);
+    const px = scrolled ? full : Math.max(Math.min(8, full), full * (1 - 0.5 * LG.immersion()));
+    const next = `${px.toFixed(1)}px`;
+    if (next === frost) return;
+    frost = next;
+    html.style.setProperty('--lg-blur', next);
+    LG.refract.setBlur(px);
+  }
+
   const refractionOn = () =>
     LG.settings.refraction && !LG.settings.performance && !LG.settings.reduceTransparency;
 
@@ -28,8 +45,12 @@
     html.classList.toggle('lg-reduce-transparency', s.reduceTransparency);
     html.classList.toggle('lg-perf', s.performance);
     html.classList.toggle('lg-refract', refractionOn());
-    html.style.setProperty('--lg-blur', `${s.blur}px`);
-    LG.refract.setBlur(s.blur);
+    // Past the midpoint only as far as LG.immersion allows (Reduce
+    // Transparency pins it there).
+    const t = s.transparency > 50 ? 50 + 50 * LG.immersion() : s.transparency;
+    html.style.setProperty('--lg-transparency', (t / 100).toFixed(2));
+    html.style.setProperty('--lg-blur-full', `${fullFrost(s).toFixed(1)}px`);
+    applyFrost();
     if (!refractionOn()) LG.refract.detachAll();
     if (!s.enabled) {
       LG.ambient.stop();
@@ -127,6 +148,87 @@
     mastheadObserver.observe(masthead, { attributes: true, attributeFilter: ['dark', 'class'], subtree: true });
   }
 
+  // ---- vibrancy for design tokens ----------------------------------------------
+  // glass.css raises secondary text (#aaa → #c6c6c6 dark, #606060 → #4a4a4a
+  // light) so the light behind it can stay brighter; contrast.js solves the
+  // scrim for that raised colour. Newer YouTube components colour it through
+  // hashed design tokens instead of --yt-spec-text-secondary, with names that
+  // can change between builds, so they are found by value: a token that is
+  // #aaa under [dark] and #606060 under [light]. (Tokens the other way round
+  // are inverse colours for dark overlays and stay as they are.) The scan
+  // walks YouTube's ~30k CSS rules in idle-time slices, once per sheet.
+  const THEME_RULE = /^(?:html)?\[(dark|light)\]$/;
+  const TOKEN_DECL = /(--t[0-9a-f]+)\s*:\s*(#[0-9a-f]{3,8})\b/gi;
+  const tokenValues = new Map(); // name -> { dark: Set, light: Set }
+  const scannedSheets = new WeakSet();
+  let tokenStyle = null;
+  let tokenCss = '';
+  let scanning = false;
+
+  function collectTokens(rule, theme) {
+    for (const [, name, value] of rule.style.cssText.matchAll(TOKEN_DECL)) {
+      let seen = tokenValues.get(name);
+      if (!seen) tokenValues.set(name, (seen = { dark: new Set(), light: new Set() }));
+      seen[theme].add(value.toLowerCase());
+    }
+  }
+
+  function writeTokens() {
+    const names = [...tokenValues]
+      .filter(([, v]) => (v.dark.has('#aaa') || v.dark.has('#aaaaaa')) && v.light.has('#606060'))
+      .map(([name]) => name);
+    const decl = (colour) => names.map((n) => `${n}: ${colour} !important;`).join(' ');
+    const css = names.length
+      ? `html.lg-on[dark], html.lg-on[dark] ytd-app { ${decl('#c6c6c6')} }\n` +
+        `html.lg-on:not([dark]), html.lg-on:not([dark]) ytd-app { ${decl('#4a4a4a')} }`
+      : '';
+    if (css === tokenCss) return;
+    tokenCss = css;
+    tokenStyle ??= document.createElement('style');
+    tokenStyle.id = 'lg-token-vibrancy';
+    tokenStyle.textContent = css;
+    if (!tokenStyle.isConnected) (document.head || html).append(tokenStyle);
+  }
+
+  function raiseSecondaryTokens() {
+    if (scanning) return;
+    const sheets = [...document.styleSheets, ...document.adoptedStyleSheets].filter((s) => !scannedSheets.has(s));
+    if (!sheets.length) return;
+    scanning = true;
+    const stack = []; // [rules, next index] per nesting level
+    const step = (deadline) => {
+      while (deadline.timeRemaining() > 2) {
+        if (!stack.length) {
+          const sheet = sheets.shift();
+          if (!sheet) {
+            scanning = false;
+            writeTokens();
+            return;
+          }
+          scannedSheets.add(sheet);
+          try {
+            stack.push([sheet.cssRules, 0]);
+          } catch {
+            // cross-origin sheet
+          }
+          continue;
+        }
+        const level = stack[stack.length - 1];
+        const rule = level[0][level[1]];
+        if (!rule) {
+          stack.pop();
+          continue;
+        }
+        level[1] += 1;
+        if (rule.cssRules?.length) stack.push([rule.cssRules, 0]); // @media, @layer, nesting
+        const theme = rule.selectorText && THEME_RULE.exec(rule.selectorText)?.[1];
+        if (theme) collectTokens(rule, theme);
+      }
+      requestIdleCallback(step);
+    };
+    requestIdleCallback(step);
+  }
+
   // ---- adaptive shadow + specular highlight --------------------------------
 
   let scrolled = false;
@@ -134,7 +236,9 @@
     'scroll',
     () => {
       const next = scrollY > 4;
-      if (next !== scrolled) html.classList.toggle('lg-scrolled', (scrolled = next));
+      if (next === scrolled) return;
+      html.classList.toggle('lg-scrolled', (scrolled = next));
+      applyFrost();
     },
     { passive: true },
   );
@@ -169,6 +273,10 @@
     applySettings();
 
     document.addEventListener('yt-navigate-finish', route);
+    // YouTube's stylesheets load after document_start; late ones on navigation.
+    if (document.readyState === 'complete') raiseSecondaryTokens();
+    else addEventListener('load', raiseSecondaryTokens, { once: true });
+    document.addEventListener('yt-navigate-finish', raiseSecondaryTokens);
     // The player's <video> can be created after navigation finishes.
     document.addEventListener('yt-player-updated', route);
     // Light/dark theme switches change the base colour.

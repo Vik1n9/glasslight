@@ -15,6 +15,9 @@
   "optBlur": {
     "message": "Glass blur"
   },
+  "optTransparency": {
+    "message": "Transparency"
+  },
   "optContrast": {
     "message": "Text contrast target"
   },
