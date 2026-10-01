@@ -115,7 +115,8 @@ html.lg-ani :is(
   .theme-list-main,
   .anime-card-block,
   .extend-card,
-  .user-watch-list .anime-card
+  .user-watch-list .anime-card,
+  .programlist-block .day-list
 ),
 html.lg-ani .container-player .player .subtitle::before {
   background:
@@ -133,6 +134,31 @@ html.lg-ani .container-player .player .subtitle::before {
 html.lg-ani :is(.theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card) {
   border-radius: 16px !important;
   overflow: hidden;
+}
+
+/* Schedule (週期表) day columns; today keeps Bahamut's orange outline. */
+html.lg-ani .programlist-block .day-list {
+  border-radius: 16px !important;
+}
+
+html.lg-ani .programlist-block .day-list.today-list {
+  box-shadow:
+    inset 0 0 0 1.5px rgb(230 118 0),
+    0 4px 16px rgb(var(--lg-shadow-rgb) / calc(var(--lg-shadow-alpha) * 0.6)) !important;
+}
+
+/* New-anime timeline: each date cell paints an opaque light track under its
+   row (::after), which shows as white bars on the lit page. */
+html.lg-ani .newanime-date-area::after {
+  background: transparent !important;
+}
+
+/* Schedule: the grey "more below" fade at the foot of the scrolling list is
+   cut off hard by the scroll box and reads as a grey slab on the lit page.
+   (A mask-image fade would make the box a backdrop root and stop the day
+   cards' frost, so the scrollbar is the only hint.) */
+html.lg-ani .programlist-wrap::before {
+  display: none !important;
 }
 
 html.lg-ani section.data {
@@ -195,7 +221,7 @@ html.lg-ani section.data .BH-rbox {
 
 /* Performance: no frost on the many cards, a denser tint instead.
    Reduce Transparency: near-solid, like glass.css does for the bars. */
-html.lg-ani.lg-perf :is(section.data, .commend-title .filter-nav, .webview_commendlist, .theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card),
+html.lg-ani.lg-perf :is(section.data, .commend-title .filter-nav, .webview_commendlist, .theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card, .programlist-block .day-list),
 html.lg-ani.lg-perf .container-player .player .subtitle::before {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
@@ -204,7 +230,7 @@ html.lg-ani.lg-perf .container-player .player .subtitle::before {
     rgb(var(--lg-glass-rgb) / min(0.92, calc(var(--lg-card-alpha) + 0.12))) !important;
 }
 
-html.lg-ani.lg-reduce-transparency :is(section.data, .commend-title .filter-nav, .webview_commendlist, .theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card),
+html.lg-ani.lg-reduce-transparency :is(section.data, .commend-title .filter-nav, .webview_commendlist, .theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card, .programlist-block .day-list),
 html.lg-ani.lg-reduce-transparency .container-player .player .subtitle::before {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
@@ -235,7 +261,7 @@ html.lg-ani:is(:fullscreen, :has(:fullscreen)) body {
 }
 
 /* Popups float over arbitrary content: Regular glass, denser (menu alpha). */
-html.lg-ani :is(.user-setting-toolbox, .anime_search .anime_search-content, .app-download-toolbox) {
+html.lg-ani :is(.user-setting-toolbox, .anime_search .anime_search-content, .app-download-toolbox, .btn-newanime-filter .filter-items) {
   background:
     linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
     rgb(var(--lg-glass-rgb) / max(var(--lg-menu-alpha), var(--lg-glass-live, 0))) !important;
@@ -259,11 +285,19 @@ html.lg-ani .video-js .vjs-control-bar.lg-clear {
   transform: none !important;
 }
 
+/* Danmu input: Bahamut nudges it 2px down from the top instead of centring
+   it; centre it vertically in the pill. */
+html.lg-ani .video-js .vjs-control-bar.lg-clear .danmutext_area {
+  align-self: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
 html.lg-ani .video-js .vjs-control-bar.lg-clear :is(.vjs-control, .vjs-time-control) {
   text-shadow: 0 0 6px rgb(0 0 0 / 0.55);
 }
 
-html.lg-ani.lg-reduce-transparency :is(.user-setting-toolbox, .anime_search .anime_search-content, .app-download-toolbox) {
+html.lg-ani.lg-reduce-transparency :is(.user-setting-toolbox, .anime_search .anime_search-content, .app-download-toolbox, .btn-newanime-filter .filter-items) {
   background: rgb(var(--lg-glass-rgb) / 0.96) !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;

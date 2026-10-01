@@ -17,7 +17,7 @@
     playerSelector: '.videoframe .video',
     // The danmu / episode column beside the player.
     sidePanels: ['.container-player .subtitle'],
-    glassScope: ['.user-setting-toolbox', '.anime_search .anime_search-content', '.app-download-toolbox'],
+    glassScope: ['.user-setting-toolbox', '.anime_search .anime_search-content', '.app-download-toolbox', '.btn-newanime-filter .filter-items'],
     // Browse pages: the anime cards whose cover lights the page (thumbs.js).
     // Home: new episodes, continue watching, extended cards; lists / search:
     // .theme-list-main; watch history: the whole row (a .click-area link covers it).
