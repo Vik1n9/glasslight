@@ -1,7 +1,7 @@
 # TODO — ani.gamer.com.tw 支援（分支 `feat/ani-gamer`）
 
 狀態：2026-10-02 驗證清單全部通過（登入與未登入／含廣告兩種情況），YouTube 與 `main`
-比對無退步。剩下「待決定」的項目需要使用者拍板（命名、合併與發版）。
+比對無退步。已於 1.1.0 發佈。
 
 ## 測試方式
 
@@ -41,5 +41,5 @@
 - [x] 正式名稱改為 "Glasslight"；網站名稱只出現在說明中，六語系說明、README、PRIVACY、商店文案都附免責與商標聲明
 - [x] 重新產生宣傳圖，副標改為 "Glass & ambient light for video"（本機用 `NOTO_DIR=<字型資料夾>` 指定 Noto Sans）
 - [x] `PRIVACY.md` 與 `store/listing.md` 補上新增網站（單一用途與權限說明也已更新）
-- [ ] **待決定**：合併到 `main`、升版本、`python3 scripts/build.py`（目前 build 驗證通過）、發 Release
+- [x] 合併到 `main`、升版本 1.1.0、`python3 scripts/build.py`、發 Release `v1.1.0`
 - [ ] 若選擇器有誤，集中修改 `src/content/ani-gamer.js` 的 `LG.site` 與 `NAV_GLASS`，以及 `src/styles/ani-gamer.css`
