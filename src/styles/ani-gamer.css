@@ -41,8 +41,40 @@ html.lg-ani .mainmenu.lg-glass {
   top: 67px !important;
 }
 
-html.lg-ani .mainmenu.lg-glass::before {
-  display: none;
+/* The popups (user menu, search suggestions, APP box) live inside these bars.
+   An element with backdrop-filter is a backdrop root, so glass nested in it
+   could only blur the bar's own paint and showed the page through unfrosted.
+   Move the bars' frost onto a ::before behind their content instead (this
+   also replaces the site's own .mainmenu::before decoration). */
+html.lg-ani.lg-on :is(.sky, .mainmenu).lg-glass {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html.lg-ani.lg-on :is(.sky, .mainmenu).lg-glass::before {
+  content: "";
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border-radius: inherit;
+  background: none;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(180%);
+  backdrop-filter: blur(var(--lg-blur)) saturate(180%);
+}
+
+html.lg-ani.lg-on.lg-refract :is(.sky, .mainmenu).lg-glass::before {
+  -webkit-backdrop-filter: var(--lg-refract, blur(var(--lg-blur)) saturate(180%));
+  backdrop-filter: var(--lg-refract, blur(var(--lg-blur)) saturate(180%));
+}
+
+html.lg-ani.lg-on.lg-reduce-transparency :is(.sky, .mainmenu).lg-glass::before {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ---------- Watch page: player card + content layer ---------------------- */
