@@ -99,13 +99,16 @@ html.lg-ani .container-player .player .videoframe :is(.R18, .video-js) {
 /* ---------- Cards: one glass material for every content card ------------
    Unlike YouTube (content as fills), every card on Bahamut — info panel,
    comments, danmu column, anime / episode / news / history cards — is the
-   same glass: glass tint + light spill, frost, rim and a soft shadow. The
-   tint follows the Transparency slider like the menus but never drops below
-   0.6, where the panel text keeps its contrast on any frame. Cards nested in
-   another card (the rating box) stay fills: a backdrop-filter inside glass
-   could only blur the outer card's paint. */
+   same glass: glass tint + light spill, frost, rim and a soft shadow. Up to
+   the Transparency midpoint the tint follows the menus but stays ≥ 0.6, a
+   dense panel for running text. Past it the cards turn into Clear glass with
+   the bars, down to the same tint floor at 100: the footage reads through,
+   and legibility comes from the backdrop's scrim map, as on YouTube. Cards
+   nested in another card (the rating box) stay fills: a backdrop-filter
+   inside glass could only blur the outer card's paint. */
 html.lg-ani {
-  --lg-card-alpha: max(0.6, calc(var(--lg-menu-alpha) * 0.85));
+  --lg-card-dense: max(0.6, calc(var(--lg-menu-alpha) * 0.85));
+  --lg-card-alpha: calc(var(--lg-card-dense) - (var(--lg-card-dense) - var(--lg-tint-floor)) * var(--lg-immerse));
 }
 
 html.lg-ani :is(
@@ -284,7 +287,24 @@ html.lg-ani:not([dark]) section.data :is(.user-score-more, .user-score-more *) {
 }
 
 html.lg-ani[dark] section.data :is(.user-score-more, .user-score-more *) {
-  color: #28c8ce !important;
+  color: #78e1e6 !important;
+}
+
+/* Dark theme: once the cards turn Clear the scrim map is all that stands
+   behind them, and it protects the theme's grey text (#c6c6c6), not Bahamut's
+   dimmer cyan or its #c7c6cb labels. Lift them to the same vibrancy. */
+html.lg-ani[dark] section.data :is(.score-overall-number, .link-button, .link-button *) {
+  color: #5acde8 !important;
+}
+
+html.lg-ani[dark] :is(section.data .score-overall-people, .container-player .subtitle .sub_list b) {
+  color: #d6d6da !important;
+}
+
+/* Light theme: the danmu timestamps (#464646) need one step darker over a
+   Clear panel on bright footage. */
+html.lg-ani:not([dark]) .container-player .subtitle .sub_list b {
+  color: #3c3c3c !important;
 }
 
 /* Fullscreen: the light is paused and hidden, letterbox areas stay black. */
