@@ -3,3 +3,5 @@
 node_modules/
 dist/
 .scratch/
+.dev/
+CLAUDE.local.md
