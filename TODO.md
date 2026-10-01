@@ -37,7 +37,7 @@
 
 - [ ] 非播放頁沒有縮圖取色，背景只有底色（需另外抓動畫瘋封面圖）
 - [x] 正式名稱改為 "Glasslight"；網站名稱只出現在說明中，六語系說明、README、PRIVACY、商店文案都附免責與商標聲明
-- [ ] 重新產生宣傳圖（`store/src/make_promos.py` 副標已改，但需要 Noto Sans 字型，本機沒有），舊圖仍寫 "for YouTube™"
+- [x] 重新產生宣傳圖，副標改為 "Glass & ambient light for video"（本機用 `NOTO_DIR=<字型資料夾>` 指定 Noto Sans）
 - [x] `PRIVACY.md` 與 `store/listing.md` 補上新增網站（單一用途與權限說明也已更新）
 - [ ] **待決定**：合併到 `main`、升版本、`python3 scripts/build.py`（目前 build 驗證通過）、發 Release
 - [ ] 若選擇器有誤，集中修改 `src/content/ani-gamer.js` 的 `LG.site` 與 `NAV_GLASS`，以及 `src/styles/ani-gamer.css`

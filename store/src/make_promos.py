@@ -3,15 +3,17 @@
 
 store/promo-small-440x280.png   (required)
 store/promo-marquee-1400x560.png (optional)
-Font: Noto Sans (SIL Open Font License).
+Font: Noto Sans (SIL Open Font License); set NOTO_DIR to a folder holding
+NotoSans-Bold.ttf and NotoSans-Medium.ttf if they are not in /usr/share/fonts/noto.
 """
+import os
 import pathlib
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 HERE = pathlib.Path(__file__).resolve().parent
 STORE = HERE.parent
-FONT_DIR = pathlib.Path('/usr/share/fonts/noto')
+FONT_DIR = pathlib.Path(os.environ.get('NOTO_DIR', '/usr/share/fonts/noto'))
 ICON = Image.open(HERE / 'icon-master-512.png').convert('RGBA')
 
 
