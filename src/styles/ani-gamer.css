@@ -89,11 +89,17 @@ html.lg-ani .anime-title {
   background: transparent !important;
 }
 
-/* Description / info box, comments: fills like YouTube's description. */
+/* Description / info box, comments: fills like YouTube's description, over a
+   base-colour wash. The scrim only guarantees contrast for the theme's grey
+   text on the bare page; these panels also hold Bahamut's cyan accents and
+   light-grey labels, and a bare fill (white in dark theme) would lift the
+   backdrop past the scrim's budget on bright frames. */
 html.lg-ani section.data,
 html.lg-ani .commend-title .filter-nav,
 html.lg-ani .webview_commendlist {
-  background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)) !important;
+  background:
+    linear-gradient(rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)), rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha))),
+    rgb(var(--lg-base) / 0.6) !important;
   border: 0 !important;
   box-shadow: inset 0 0 0 0.5px rgb(var(--lg-fill-rgb) / 0.08) !important;
 }
@@ -116,6 +122,23 @@ html.lg-ani .old_list :is(.theme-list-main, .theme-info-block) {
   background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)) !important;
   border-radius: 16px !important;
   box-shadow: none !important;
+}
+
+/* Bahamut's cyan accents are tuned for a white page (#00b4d8 is only 2.3:1
+   there); over the tinted light-theme backdrop they wash out, so deepen them
+   — the same vibrancy move glass.css makes for YouTube's secondary text. */
+html.lg-ani:not([dark]) section.data :is(.score-overall-number, .link-button, .link-button *) {
+  color: #007a93 !important;
+}
+
+/* The rating button sits on a second fill (.BH-rbox), one step further from
+   the page colour, so it needs the strongest shift in both themes. */
+html.lg-ani:not([dark]) section.data :is(.user-score-more, .user-score-more *) {
+  color: #005a6c !important;
+}
+
+html.lg-ani[dark] section.data :is(.user-score-more, .user-score-more *) {
+  color: #28c8ce !important;
 }
 
 html.lg-ani .old_list .theme-list-main {
