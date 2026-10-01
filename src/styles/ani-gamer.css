@@ -112,7 +112,7 @@ html.lg-ani :is(
   section.data,
   .commend-title .filter-nav,
   .webview_commendlist,
-  .theme-list-main,
+  .theme-list-main .anime-detail-block,
   .anime-card-block,
   .extend-card,
   .user-watch-list .anime-card,
@@ -131,9 +131,41 @@ html.lg-ani .container-player .player .subtitle::before {
     0 4px 16px rgb(var(--lg-shadow-rgb) / calc(var(--lg-shadow-alpha) * 0.6)) !important;
 }
 
-html.lg-ani :is(.theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card) {
+html.lg-ani :is(.anime-card-block, .extend-card, .user-watch-list .anime-card) {
   border-radius: 16px !important;
   overflow: hidden;
+}
+
+/* Anime cards (.theme-list-main): on hover Bahamut unclamps a long title and
+   grows the info block upward over the cover, which only worked on its white
+   fill. Here the glass lives on the info block, which hangs below the cover
+   and grows downward: the card extends with its title, floating over the row
+   below (no reflow) instead of covering its own artwork. */
+html.lg-ani .theme-list-main {
+  overflow: visible !important;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+html.lg-ani .theme-list-main:hover {
+  z-index: 5;
+}
+
+html.lg-ani .theme-list-main .theme-img-block {
+  border-radius: 16px 16px 0 0 !important;
+  overflow: hidden !important;
+}
+
+/* Pinned by its top at the resting spot (the block is 61px at rest on every
+   page; the card itself is 322 or 367px) and free at the bottom, so it can
+   only grow downward. top: auto would not do: in a flex card an absolute
+   box's static position is the card's top. */
+html.lg-ani .theme-list-main .anime-detail-block {
+  top: calc(100% - 61px) !important;
+  bottom: auto !important;
+  border-radius: 0 0 16px 16px !important;
 }
 
 /* Schedule (週期表) day columns; today keeps Bahamut's orange outline. */
@@ -202,7 +234,8 @@ html.lg-ani .container-player .player .subtitle :is(.sub_top, .ani-tabs-link, .a
 }
 
 /* The cards' own inner white blocks would hide the glass. */
-html.lg-ani :is(.theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card) :is(.theme-info-block, .anime-detail-block, .extend-content-block, .anime-content-block) {
+html.lg-ani .theme-list-main .theme-info-block,
+html.lg-ani :is(.anime-card-block, .extend-card, .user-watch-list .anime-card) :is(.theme-info-block, .anime-detail-block, .extend-content-block, .anime-content-block) {
   background: transparent !important;
   border-radius: 0 !important;
 }
@@ -221,7 +254,7 @@ html.lg-ani section.data .BH-rbox {
 
 /* Performance: no frost on the many cards, a denser tint instead.
    Reduce Transparency: near-solid, like glass.css does for the bars. */
-html.lg-ani.lg-perf :is(section.data, .commend-title .filter-nav, .webview_commendlist, .theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card, .programlist-block .day-list),
+html.lg-ani.lg-perf :is(section.data, .commend-title .filter-nav, .webview_commendlist, .theme-list-main .anime-detail-block, .anime-card-block, .extend-card, .user-watch-list .anime-card, .programlist-block .day-list),
 html.lg-ani.lg-perf .container-player .player .subtitle::before {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
@@ -230,7 +263,7 @@ html.lg-ani.lg-perf .container-player .player .subtitle::before {
     rgb(var(--lg-glass-rgb) / min(0.92, calc(var(--lg-card-alpha) + 0.12))) !important;
 }
 
-html.lg-ani.lg-reduce-transparency :is(section.data, .commend-title .filter-nav, .webview_commendlist, .theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card, .programlist-block .day-list),
+html.lg-ani.lg-reduce-transparency :is(section.data, .commend-title .filter-nav, .webview_commendlist, .theme-list-main .anime-detail-block, .anime-card-block, .extend-card, .user-watch-list .anime-card, .programlist-block .day-list),
 html.lg-ani.lg-reduce-transparency .container-player .player .subtitle::before {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
