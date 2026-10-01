@@ -7,7 +7,10 @@
   const html = document.documentElement;
 
   LG.site = {
-    playerSelector: '.video-js',
+    // The rounded player card. Not .video-js: Bahamut's <video-js> element is
+    // display: inline and measures 0×0 (the <video> inside is positioned
+    // against .video), so the glow would be placed around nothing.
+    playerSelector: '.videoframe .video',
     // The danmu / episode column beside the player.
     sidePanels: ['.container-player .subtitle'],
     glassScope: ['.user-setting-toolbox', '.anime_search .anime_search-content', '.app-download-toolbox'],
