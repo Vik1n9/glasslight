@@ -1,9 +1,9 @@
 # Privacy Policy — Glasslight for YouTube™
 
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-02_
 
-Glasslight changes how youtube.com looks inside your browser. It does not
-collect, sell, or share personal data.
+Glasslight changes how youtube.com and ani.gamer.com.tw (Bahamut Anime Crazy)
+look inside your browser. It does not collect, sell, or share personal data.
 
 ## What the extension processes, and where
 
@@ -22,7 +22,7 @@ collect, sell, or share personal data.
 
 ## Permissions
 
-- **Access to `www.youtube.com`** — to apply the glass styling and read video frames for the ambient light.
+- **Access to `www.youtube.com` and `ani.gamer.com.tw`** — to apply the glass styling and read video frames for the ambient light.
 - **Access to `i.ytimg.com`** — to read thumbnail colours; a browser page cannot read these pixels directly.
 - **`storage`** — to remember your settings.
 
@@ -32,4 +32,4 @@ Questions or concerns: open an issue at
 https://github.com/Vik1n9/glasslight/issues
 
 Glasslight is an independent project and is not affiliated with, endorsed by,
-or sponsored by Google LLC or YouTube.
+or sponsored by Google LLC, YouTube, or Bahamut (巴哈姆特).
