@@ -45,6 +45,12 @@
   let smctx;
   let scrimImg;
   let stillShown = false; // display holds a thumbnail, not video
+  // The stats tick reads the display canvas back from the GPU, which waits for
+  // the GPU to drain (tens of ms with many glass surfaces on the page). When
+  // nothing is playing the canvas holds still, so it is only re-read after it
+  // changes; everything below sets this when the canvas or the inputs change.
+  let sampleDirty = true;
+  let lastPx = null;
 
   // Glow margin around the player, px. Portrait players (Shorts) have empty
   // space beside them, so their halo spreads wider.
@@ -80,6 +86,7 @@
     dctx = display.getContext('2d', { alpha: false });
     dctx.fillStyle = LG.isDarkTheme() ? '#0f0f0f' : '#f9f9fa';
     dctx.fillRect(0, 0, W, H);
+    sampleDirty = true;
     scrimMap = document.createElement('canvas');
     scrimMap.width = GRID_X;
     scrimMap.height = GRID_Y;
@@ -98,6 +105,7 @@
     glowClip.id = 'lg-glow-clip';
     glowClip.append(glow);
     root.append(display, scrimMap, glowClip);
+    root.classList.add('lg-still');
     (document.body || document.documentElement).prepend(root);
 
     sample = new OffscreenCanvas(SAMPLE_W, SAMPLE_H);
@@ -130,6 +138,7 @@
       display.height = H;
       dctx.fillStyle = LG.isDarkTheme() ? '#0f0f0f' : '#f9f9fa';
       dctx.fillRect(0, 0, W, H);
+      sampleDirty = true;
       if (stillShown) drawStill(1);
       else if (videoLive()) drawOnce();
     }
@@ -173,6 +182,7 @@
     dctx.globalAlpha = alpha;
     dctx.filter = filter;
     dctx.drawImage(video, cx, cy, cw, ch, -ox, -oy, W + ox * 2, H + oy * 2);
+    sampleDirty = true;
     dctx.filter = 'none';
     dctx.globalAlpha = 1;
     stillShown = false;
@@ -286,6 +296,7 @@
   function blockVideo() {
     cancel();
     videoBlocked = true;
+    syncMotion();
     onBlocked();
   }
 
@@ -299,17 +310,27 @@
     }
   }
 
+  // The canvas drift (lg-drift) re-renders a full-viewport blurred layer —
+  // and every glass surface over it — on every frame. Moving footage pays
+  // that anyway; a still light (thumbnail, paused or no video) doesn't need
+  // it, so the drift holds its position until playback resumes.
+  function syncMotion() {
+    root?.classList.toggle('lg-still', !(videoLive() && !video.paused && !video.ended));
+  }
+
   const videoEvents = {
-    play: () => schedule(),
-    playing: () => schedule(),
+    play: () => (schedule(), syncMotion()),
+    playing: () => (schedule(), syncMotion()),
     seeked: () => drawOnce(),
-    pause: () => drawOnce(),
+    pause: () => (drawOnce(), syncMotion()),
+    ended: () => syncMotion(),
     loadeddata: () => {
       videoBlocked = false;
       blackTicks = 0;
       crop = { x: 0, y: 0, w: 1, h: 1 };
       drawOnce();
       schedule();
+      syncMotion();
     },
   };
 
@@ -328,6 +349,8 @@
     glowKey = '';
     queueGlow();
     for (const [ev, fn] of Object.entries(videoEvents)) video.addEventListener(ev, fn);
+    sampleDirty = true;
+    syncMotion();
     if (video.readyState >= 2) drawOnce();
     schedule();
   }
@@ -337,6 +360,8 @@
     if (!video) return;
     for (const [ev, fn] of Object.entries(videoEvents)) video.removeEventListener(ev, fn);
     video = null;
+    sampleDirty = true;
+    syncMotion();
   }
 
   const videoLive = () => !!video && !videoBlocked && video.readyState >= 2;
@@ -428,6 +453,7 @@
     // and a thumbnail stays a soft wash even when immersive.
     dctx.filter = `blur(${((3 * W) / 96).toFixed(1)}px) saturate(1.9) brightness(1.1)`;
     dctx.drawImage(still, -W / 16, -H / 13.5, W + W / 8, H + H / 6.75);
+    sampleDirty = true;
     dctx.filter = 'none';
     dctx.globalAlpha = 1;
   }
@@ -556,15 +582,31 @@
 
   let tickCount = 0;
 
+  let settled = false; // the last tick changed nothing and the tint has converged
+
   function tick() {
     if (!active()) return;
+    // Nothing new on the canvas and the eased values have arrived: the
+    // result would be identical, so skip the GPU readback and the solve.
+    // Layout can still move the player or open a side panel: keep the glow
+    // placed (cheap: a few rects and a key compare).
+    if (!sampleDirty && settled) {
+      if (video) placeGlow();
+      return;
+    }
     // Letterbox / brightness / DRM checks don't need 4 Hz.
-    if ((tickCount += 1) % 2 === 0) analyseRawFrame();
+    if (videoLive() && !video.paused && (tickCount += 1) % 2 === 0) analyseRawFrame();
     // Sample what the page shows: #lg-ambient-canvas has saturate(1.5).
-    sctx.filter = 'saturate(1.5)';
-    sctx.drawImage(display, 0, 0, SAMPLE_W, SAMPLE_H);
-    sctx.filter = 'none';
-    const px = sctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
+    // Re-read only after the canvas changed; easing towards the target
+    // tint reuses the last sample.
+    if (sampleDirty || !lastPx) {
+      sctx.filter = 'saturate(1.5)';
+      sctx.drawImage(display, 0, 0, SAMPLE_W, SAMPLE_H);
+      sctx.filter = 'none';
+      lastPx = sctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
+      sampleDirty = false;
+    }
+    const px = lastPx;
     const dark = LG.isDarkTheme();
     const opacity = ambientOpacity();
     solveScrimMap(px, opacity, dark);
@@ -588,6 +630,8 @@
     const floor = mastheadFloor(px, opacity, glowOpacity, dark);
     const glass = floor > 0 ? Math.min(0.92, floor + 0.08) : 0;
     glassAlpha = glass > glassAlpha ? glass : glassAlpha + (glass - glassAlpha) * 0.15;
+    // Converged once the quantized value (1/50 steps) can no longer move.
+    settled = Math.abs(glass - glassAlpha) < 0.005;
 
     // Read layout before any write below: a write followed by a layout read
     // forces a synchronous style recalc (~50 ms on YouTube's DOM).
@@ -653,6 +697,7 @@
     applyClarity();
     clearInterval(statsTimer);
     statsTimer = setInterval(tick, STATS_MS);
+    sampleDirty = true;
     tick();
   }
 
@@ -683,6 +728,10 @@
     showPixels,
     isVideoLive: () => videoLive() && !video.paused,
     isVideoBlocked: () => videoBlocked,
-    tick,
+    /** Recompute now (e.g. after a theme switch changed the inputs). */
+    tick: () => {
+      sampleDirty = true;
+      tick();
+    },
   };
 })();

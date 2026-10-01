@@ -119,6 +119,12 @@ html:not(.lg-on) #lg-ambient {
   will-change: transform;
 }
 
+/* Nothing playing: hold the drift (ambient.js toggles .lg-still). Animating
+   this layer re-renders it and every glass surface above it each frame. */
+#lg-ambient.lg-still #lg-ambient-canvas {
+  animation-play-state: paused;
+}
+
 @keyframes lg-drift {
   from { transform: scale(1) translate3d(0, 0, 0); }
   to   { transform: scale(1.06) translate3d(-1.5%, 1%, 0); }

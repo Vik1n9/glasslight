@@ -307,6 +307,16 @@ html.lg-ani :is(.user-setting-toolbox, .anime_search .anime_search-content, .app
     0 10px 30px rgb(var(--lg-shadow-rgb) / var(--lg-shadow-alpha)) !important;
 }
 
+/* Bahamut's attention cues loop forever: the shine on the seasonal-promo
+   button and in the search panel (0.8s, running even while that panel is
+   display: none) and the bouncing dot on the danmu settings tab (1.7s). Each
+   asks the compositor for a new frame every vsync, which over the lit page
+   and its glass keeps the GPU busy on an idle page. Three rounds still draw
+   the eye; then they rest (a panel that opens restarts its cue). */
+html.lg-ani :is(.shinning, .notice-dot.bouncing) {
+  animation-iteration-count: 3 !important;
+}
+
 /* Player controls: Clear glass pill. The bar is a full-width strip, so it
    must not shrink on :active like a button. */
 html.lg-ani .video-js .vjs-control-bar.lg-clear {
