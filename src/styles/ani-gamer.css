@@ -41,6 +41,21 @@ html.lg-ani .mainmenu.lg-glass {
   top: 67px !important;
 }
 
+/* Theater mode (劇院模式): Bahamut slides the header away by its own 100px
+   (.top_sky.fullwindow.is-fixed; .fullwindow drops while the pointer is at
+   the top to bring it back). The floating capsules make the header 112px
+   plus a shadow, so slide it by its full height and the shadow too.
+   Bahamut's hide timer can re-add .fullwindow just after theater mode was
+   left (no .is-fixed then), stranding the header off screen on the normal
+   page; keep it in place in that state. */
+html.lg-ani .top_sky.fullwindow.is-fixed {
+  transform: translateY(calc(-100% - 32px)) !important;
+}
+
+html.lg-ani .top_sky.fullwindow:not(.is-fixed) {
+  transform: none !important;
+}
+
 /* The popups (user menu, search suggestions, APP box) live inside these bars.
    An element with backdrop-filter is a backdrop root, so glass nested in it
    could only blur the bar's own paint and showed the page through unfrosted.
@@ -94,6 +109,16 @@ html.lg-ani .container-player .player .video {
 
 html.lg-ani .container-player .player .videoframe :is(.R18, .video-js) {
   border-radius: inherit;
+}
+
+/* Theater mode fills the window edge to edge, like YouTube's theater mode:
+   no card inset or rounding. */
+html.lg-ani .container-player .player .videoframe.vjs-fullwindow {
+  padding: 0 !important;
+}
+
+html.lg-ani .container-player .player .videoframe.vjs-fullwindow .video {
+  border-radius: 0 !important;
 }
 
 /* ---------- Cards: one glass material for every content card ------------
