@@ -1,12 +1,14 @@
-# Glasslight for YouTube™
+# Glasslight
 
-Chromium extension (MV3) that gives YouTube™ a frosted, refractive glass
+Chromium extension (MV3) that gives video sites — YouTube™ and 巴哈姆特動畫瘋
+(ani.gamer.com.tw) — a frosted, refractive glass
 interface — inspired by the glass design language Apple presented at WWDC25 —
 with page-wide ambient light driven by the playing video, while keeping text
 legible.
 
 > Glasslight is an independent project. It is not affiliated with, endorsed
-> by, or sponsored by Apple Inc., Google LLC, or YouTube.
+> by, or sponsored by Apple Inc., Google LLC, YouTube, or Bahamut (巴哈姆特).
+> Site names are used only to say where the extension works.
 
 ## Supported sites
 
@@ -124,8 +126,10 @@ MIT — see [LICENSE](LICENSE).
 
 ## Trademarks
 
-YouTube, Chrome and Chromium are trademarks of Google LLC. Apple is a
+YouTube, Chrome and Chromium are trademarks of Google LLC. 巴哈姆特 (Bahamut)
+and 動畫瘋 (Anime Crazy) are trademarks of their respective owner. Apple is a
 trademark of Apple Inc., and "Liquid Glass" is Apple's name for its design
 material. These names are used only to describe compatibility and design
 references; this project is not affiliated with or endorsed by any of these
-companies. The icon and all code are original to this project.
+companies, and all site content shown through the extension remains the
+property of its owners. The icon and all code are original to this project.

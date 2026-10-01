@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "Glasslight for YouTube™",
+    "message": "Glasslight",
     "description": "Extension name; keep as is in every language."
   },
   "extDescription": {
-    "message": "Frosted glass interface for YouTube™ with ambient light from the playing video. Text stays legible. Not affiliated with YouTube."
+    "message": "Frosted glass UI and ambient light from the playing video, text kept legible. For YouTube™ and 動畫瘋. Independent, not affiliated."
   },
   "optEnabled": {
     "message": "Enable"

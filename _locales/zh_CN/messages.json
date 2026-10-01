@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "Glasslight for YouTube™",
+    "message": "Glasslight",
     "description": "Extension name; keep as is in every language."
   },
   "extDescription": {
-    "message": "为 YouTube™ 加上磨砂折射玻璃界面，并以播放中的视频生成全页环境光，同时保持文字清晰可读。与 YouTube 或 Google 无关。"
+    "message": "磨砂折射玻璃界面与随视频变化的全页环境光，文字保持清晰。适用于 YouTube™ 与巴哈姆特动画疯。本扩展为独立项目，与 Google、YouTube、巴哈姆特无关。"
   },
   "optEnabled": {
     "message": "启用"

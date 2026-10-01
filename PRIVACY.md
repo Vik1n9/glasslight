@@ -1,4 +1,4 @@
-# Privacy Policy — Glasslight for YouTube™
+# Privacy Policy — Glasslight
 
 _Last updated: 2026-10-02_
 
@@ -32,4 +32,6 @@ Questions or concerns: open an issue at
 https://github.com/Vik1n9/glasslight/issues
 
 Glasslight is an independent project and is not affiliated with, endorsed by,
-or sponsored by Google LLC, YouTube, or Bahamut (巴哈姆特).
+or sponsored by Google LLC, YouTube, or Bahamut (巴哈姆特). YouTube is a
+trademark of Google LLC; 巴哈姆特 and 動畫瘋 are trademarks of their respective
+owner. They are named here only to describe where the extension works.

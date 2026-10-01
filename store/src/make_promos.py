@@ -57,7 +57,7 @@ def tile(w, h, icon_size, title_size, sub_size, pane_pad):
     icon = ICON.resize((icon_size, icon_size), Image.LANCZOS)
     title_font = font('Bold', title_size)
     sub_font = font('Medium', sub_size)
-    title, sub = 'Glasslight', 'Glass & ambient light for YouTube™'
+    title, sub = 'Glasslight', 'Glass & ambient light for video'
     d = ImageDraw.Draw(img)
     tw = d.textlength(title, font=title_font)
     sw = d.textlength(sub, font=sub_font)

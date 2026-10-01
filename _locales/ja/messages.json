@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "Glasslight for YouTube™",
+    "message": "Glasslight",
     "description": "Extension name; keep as is in every language."
   },
   "extDescription": {
-    "message": "YouTube™ にすりガラス風の屈折するガラスインターフェースを加え、再生中の動画からページ全体にアンビエントライトを生成します。文字の読みやすさは保たれます。YouTube および Google とは関係ありません。"
+    "message": "すりガラス風のインターフェースと、再生中の動画から生まれるページ全体のアンビエントライト。文字は読みやすいまま。YouTube™ と動畫瘋（ani.gamer.com.tw）に対応。各社とは関係のない独立したプロジェクトです。"
   },
   "optEnabled": {
     "message": "有効にする"

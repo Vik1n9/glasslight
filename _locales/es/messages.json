@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "Glasslight for YouTube™",
+    "message": "Glasslight",
     "description": "Extension name; keep as is in every language."
   },
   "extDescription": {
-    "message": "Interfaz de cristal esmerilado para YouTube™ con luz ambiental del vídeo en reproducción. Texto legible. Sin relación con YouTube."
+    "message": "Cristal esmerilado y luz ambiental del vídeo, texto legible. Para YouTube™ y 動畫瘋. Proyecto independiente, sin afiliación."
   },
   "optEnabled": {
     "message": "Activar"

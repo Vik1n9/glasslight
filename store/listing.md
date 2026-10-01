@@ -1,11 +1,11 @@
-# Chrome Web Store submission — Glasslight for YouTube™ 1.0.0
+# Chrome Web Store submission — Glasslight
 
 Everything the Developer Dashboard asks for, ready to paste.
-Package: `python3 scripts/build.py` → `dist/glasslight-1.0.0.zip`.
+Package: `python3 scripts/build.py` → `dist/glasslight-<version>.zip`.
 
 ## Store listing
 
-- **Name:** Glasslight for YouTube™ (from `_locales/*/messages.json`)
+- **Name:** Glasslight (from `_locales/*/messages.json`; site names stay out of the name — they are other companies' trademarks)
 - **Summary:** from the manifest description, localized in 6 languages (≤132 chars)
 - **Category:** Functionality & UI (Make Chrome Yours)
 - **Listing language:** English only (description and screenshots are in English; the extension UI itself ships in 6 languages).
@@ -17,7 +17,7 @@ Package: `python3 scripts/build.py` → `dist/glasslight-1.0.0.zip`.
 
 ### Detailed description — English
 
-Glasslight turns YouTube into a calm, glass-like space lit by what you are watching.
+Glasslight turns the video sites you watch on — YouTube™ and 巴哈姆特動畫瘋 (ani.gamer.com.tw) — into a calm, glass-like space lit by what you are watching.
 
 • Page-wide ambient light — colours from the playing video flow across the whole page, with a soft glow radiating from behind the player. When nothing is playing, the light follows the thumbnail you hover.
 • Frosted, refractive glass — the top bar, category bar, menus and player controls become floating glass with gentle refraction, a light-catching rim and adaptive shadows.
@@ -28,7 +28,7 @@ Glasslight turns YouTube into a calm, glass-like space lit by what you are watch
 • Private by design — video frames are analysed on your device and never leave it. No analytics, no tracking, no remote code.
 • Six languages — English, Traditional Chinese, Simplified Chinese, Spanish, Japanese, Korean — switchable in the popup.
 
-Glasslight is an independent project and is not affiliated with, endorsed by, or sponsored by Google LLC or YouTube. YouTube is a trademark of Google LLC.
+Glasslight is an independent project and is not affiliated with, endorsed by, or sponsored by Google LLC, YouTube, or Bahamut (巴哈姆特). YouTube is a trademark of Google LLC; 巴哈姆特 and 動畫瘋 are trademarks of their respective owner. Site names are used only to describe compatibility, and all site content remains the property of its owners.
 
 ## Privacy practices tab
 

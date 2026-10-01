@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "Glasslight for YouTube™",
+    "message": "Glasslight",
     "description": "Extension name; keep as is in every language."
   },
   "extDescription": {
-    "message": "YouTube™에 반투명하게 굴절되는 유리 인터페이스를 더하고, 재생 중인 동영상으로 페이지 전체에 앰비언트 라이트를 만들면서 글자의 가독성을 유지합니다. YouTube 또는 Google과 관련이 없습니다."
+    "message": "반투명 유리 인터페이스와 재생 중인 동영상에서 나오는 페이지 전체 앰비언트 라이트, 글자 가독성 유지. YouTube™ 및 動畫瘋(ani.gamer.com.tw) 지원. 각 회사와 관련 없는 독립 프로젝트입니다."
   },
   "optEnabled": {
     "message": "사용"
