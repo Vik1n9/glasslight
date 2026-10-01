@@ -14,16 +14,117 @@ html.lg-ani .mainmenu ul {
   background: transparent !important;
 }
 
-/* The bars are position: fixed; .lg-glass would otherwise make them relative. */
+/* Top bar + main menu: two floating capsules inset from the window edges,
+   like YouTube's masthead over its chip bar. They stay position: fixed
+   (.lg-glass would make them relative); .top_sky is the in-flow spacer
+   under them, grown to clear the insets. */
+html.lg-ani .top_sky {
+  height: 112px !important;
+}
+
 html.lg-ani .sky.lg-glass,
 html.lg-ani .mainmenu.lg-glass {
   position: fixed;
-  border-radius: 0 0 22px 22px !important;
-  border-bottom-color: transparent !important;
+  left: 12px !important;
+  right: 12px !important;
+  width: auto !important;
+  border: 0 !important;
+}
+
+html.lg-ani .sky.lg-glass {
+  --lg-radius: 24px;
+  top: 6px !important;
+}
+
+html.lg-ani .mainmenu.lg-glass {
+  --lg-radius: 22px;
+  top: 67px !important;
 }
 
 html.lg-ani .mainmenu.lg-glass::before {
   display: none;
+}
+
+/* ---------- Watch page: player card + content layer ---------------------- */
+
+/* The player sits in the lit page as a rounded card, inset like YouTube's.
+   Insets are padding / transparent borders so Bahamut's percentage widths
+   (74.5% / 25.5%, and its other layout modes) still add up. */
+html.lg-ani .container-player .player .videoframe {
+  box-sizing: border-box;
+  padding: 0 6px 0 16px;
+  background: transparent !important;
+}
+
+html.lg-ani .container-player .player .video {
+  border-radius: 20px;
+}
+
+html.lg-ani .container-player .player .videoframe :is(.R18, .video-js) {
+  border-radius: inherit;
+}
+
+/* Danmu / episode column: a content panel (fill, not glass), denser like
+   YouTube's engagement panels since it holds running text. */
+html.lg-ani .container-player .player .subtitle {
+  box-sizing: border-box;
+  border: solid transparent !important;
+  border-width: 0 16px 0 6px !important;
+  background: rgb(var(--lg-base) / 0.7) !important;
+  background-clip: padding-box !important;
+  border-radius: 36px 36px 36px 26px;
+}
+
+html.lg-ani[dark] .container-player .player .subtitle {
+  background: rgb(var(--lg-base) / 0.55) !important;
+  background-clip: padding-box !important;
+}
+
+html.lg-ani .container-player .player .subtitle :is(.sub_top, .ani-tabs-link, .ani-tab-content) {
+  background: transparent !important;
+}
+
+/* Title band: text straight on the page, like YouTube's watch title. */
+html.lg-ani .anime-title {
+  background: transparent !important;
+}
+
+/* Description / info box, comments: fills like YouTube's description. */
+html.lg-ani section.data,
+html.lg-ani .commend-title .filter-nav,
+html.lg-ani .webview_commendlist {
+  background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)) !important;
+  border: 0 !important;
+  box-shadow: inset 0 0 0 0.5px rgb(var(--lg-fill-rgb) / 0.08) !important;
+}
+
+html.lg-ani section.data {
+  margin: 0 16px !important;
+  border-radius: 20px !important;
+}
+
+html.lg-ani .commend-title .filter-nav {
+  border-radius: 20px 20px 0 0 !important;
+}
+
+html.lg-ani .webview_commendlist {
+  border-radius: 0 0 20px 20px !important;
+}
+
+html.lg-ani section.data .BH-rbox,
+html.lg-ani .old_list :is(.theme-list-main, .theme-info-block) {
+  background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)) !important;
+  border-radius: 16px !important;
+  box-shadow: none !important;
+}
+
+html.lg-ani .old_list .theme-list-main {
+  overflow: hidden;
+}
+
+html.lg-ani .old_list .theme-info-block {
+  background: transparent !important;
+  border-radius: 0 !important;
 }
 
 /* Fullscreen: the light is paused and hidden, letterbox areas stay black. */
@@ -50,10 +151,10 @@ html.lg-ani :is(.user-setting-toolbox, .anime_search .anime_search-content, .app
    must not shrink on :active like a button. */
 html.lg-ani .video-js .vjs-control-bar.lg-clear {
   border-radius: 16px !important;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  width: auto;
+  left: 8px !important;
+  right: 8px !important;
+  bottom: 8px !important;
+  width: auto !important;
   transform: none !important;
 }
 
