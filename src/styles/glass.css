@@ -82,12 +82,28 @@ html.lg-on[dark],
 html.lg-on[dark] ytd-app {
   --yt-sys-color-baseline--text-secondary: #c6c6c6 !important;
   --yt-spec-text-secondary: #c6c6c6 !important;
+  /* Links: the scrim protects the grey above, and YouTube's link blue sits
+     on the wrong side of it in both themes, so lift / deepen it to match. */
+  --yt-spec-call-to-action: #b0dbff !important;
+  --yt-sys-color-baseline--call-to-action: #b0dbff !important;
 }
 
 html.lg-on:not([dark]),
 html.lg-on:not([dark]) ytd-app {
   --yt-sys-color-baseline--text-secondary: #4a4a4a !important;
   --yt-spec-text-secondary: #4a4a4a !important;
+  --yt-spec-call-to-action: #0b3fa0 !important;
+  --yt-sys-color-baseline--call-to-action: #0b3fa0 !important;
+}
+
+/* Description / comment links get their blue as an inline style on a
+   wrapper span (the link inherits it), not through a token. */
+html.lg-on:not([dark]) .ytAttributedStringLinkInheritColor[style*="rgb(6, 95, 212)"] {
+  color: #0b3fa0 !important;
+}
+
+html.lg-on[dark] .ytAttributedStringLinkInheritColor[style*="rgb(62, 166, 255)"] {
+  color: #b0dbff !important;
 }
 
 /* ---------- 1. Background: ambient light + scrim ------------------------ */

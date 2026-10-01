@@ -11,7 +11,7 @@
 // over it at the contrast target, so dark water stays vivid and only bright
 // shoals are dimmed.
 (() => {
-  // Display canvas: 96×54 colour wash at the midpoint, up to 384×216 fully
+  // Display canvas: 96×54 colour wash at the midpoint, up to 768×432 fully
   // immersive (see applyClarity). The glow keeps the small size.
   let W = 96;
   let H = 54;
@@ -130,7 +130,7 @@
     const k = LG.immersion(true);
     if (k === clarity) return;
     clarity = k;
-    const w = Math.round((96 + 288 * k) / 16) * 16; // 96…384, keeps 16:9 exact
+    const w = Math.round((96 + 672 * k) / 16) * 16; // 96…768, keeps 16:9 exact
     if (w !== W) {
       W = w;
       H = (w * 9) / 16;
@@ -142,7 +142,7 @@
       if (stillShown) drawStill(1);
       else if (videoLive()) drawOnce();
     }
-    root.style.setProperty('--lg-ambient-blur', `${(18 - 15 * k).toFixed(1)}px`);
+    root.style.setProperty('--lg-ambient-blur', `${(18 - 17 * k).toFixed(1)}px`);
   }
 
   // ---- video source --------------------------------------------------------

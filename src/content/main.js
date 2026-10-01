@@ -28,7 +28,10 @@
   function applyFrost() {
     const s = LG.settings;
     const full = fullFrost(s);
-    const px = scrolled ? full : Math.max(Math.min(8, full), full * (1 - 0.5 * LG.immersion()));
+    // Clear glass (past the midpoint) frosts less, down to a quarter at 100 —
+    // a light 2–6 px that reads as glass, not frosted glass. Content
+    // scrolling underneath keeps the full frost (text under text).
+    const px = scrolled ? full : full * (1 - 0.75 * LG.immersion());
     const next = `${px.toFixed(1)}px`;
     if (next === frost) return;
     frost = next;
@@ -154,7 +157,8 @@
   // scrim for that raised colour. Newer YouTube components colour it through
   // hashed design tokens instead of --yt-spec-text-secondary, with names that
   // can change between builds, so they are found by value: a token that is
-  // #aaa under [dark] and #606060 under [light]. (Tokens the other way round
+  // #aaa under [dark] and #606060 under [light] (likewise the link blue, see
+  // TOKEN_VIBRANCY). (Tokens the other way round
   // are inverse colours for dark overlays and stay as they are.) The scan
   // walks YouTube's ~30k CSS rules in idle-time slices, once per sheet.
   const THEME_RULE = /^(?:html)?\[(dark|light)\]$/;
@@ -173,14 +177,30 @@
     }
   }
 
+  // [YouTube's dark value(s), its light value, our dark, our light]. Link blue
+  // sits on the wrong side of the protected grey in both themes (lighter on a
+  // light page, darker on a dark one), so it is deepened / lifted the same way.
+  const TOKEN_VIBRANCY = [
+    [['#aaa', '#aaaaaa'], '#606060', '#c6c6c6', '#4a4a4a'], // secondary text
+    [['#3ea6ff'], '#065fd4', '#b0dbff', '#0b3fa0'], // links (call to action)
+  ];
+
   function writeTokens() {
-    const names = [...tokenValues]
-      .filter(([, v]) => (v.dark.has('#aaa') || v.dark.has('#aaaaaa')) && v.light.has('#606060'))
-      .map(([name]) => name);
-    const decl = (colour) => names.map((n) => `${n}: ${colour} !important;`).join(' ');
-    const css = names.length
-      ? `html.lg-on[dark], html.lg-on[dark] ytd-app { ${decl('#c6c6c6')} }\n` +
-        `html.lg-on:not([dark]), html.lg-on:not([dark]) ytd-app { ${decl('#4a4a4a')} }`
+    const dark = [];
+    const light = [];
+    for (const [name, v] of tokenValues) {
+      for (const [ytDark, ytLight, ours, oursLight] of TOKEN_VIBRANCY) {
+        if (!ytDark.some((c) => v.dark.has(c)) || !v.light.has(ytLight)) continue;
+        dark.push(`${name}: ${ours} !important;`);
+        light.push(`${name}: ${oursLight} !important;`);
+      }
+    }
+    // Components re-declare the tokens under their own [dark] / [light]
+    // attribute; override those too (same theme only — an inverse overlay,
+    // [light] inside a dark page, keeps its colours).
+    const css = dark.length
+      ? `html.lg-on[dark], html.lg-on[dark] ytd-app, html.lg-on[dark] [dark] { ${dark.join(' ')} }\n` +
+        `html.lg-on:not([dark]), html.lg-on:not([dark]) ytd-app, html.lg-on:not([dark]) [light] { ${light.join(' ')} }`
       : '';
     if (css === tokenCss) return;
     tokenCss = css;

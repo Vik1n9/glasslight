@@ -343,8 +343,9 @@ html.lg-ani :is(.user-setting-toolbox, .anime_search .anime_search-content, .app
   background:
     linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
     rgb(var(--lg-glass-rgb) / max(var(--lg-menu-alpha), var(--lg-glass-live, 0))) !important;
-  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(180%) !important;
-  backdrop-filter: blur(var(--lg-blur)) saturate(180%) !important;
+  /* Menus float over arbitrary content: full frost even when Clear (as on YouTube). */
+  -webkit-backdrop-filter: blur(var(--lg-blur-full, var(--lg-blur))) saturate(180%) !important;
+  backdrop-filter: blur(var(--lg-blur-full, var(--lg-blur))) saturate(180%) !important;
   border-radius: 18px !important;
   box-shadow:
     inset 0 1px 0 rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.5)),

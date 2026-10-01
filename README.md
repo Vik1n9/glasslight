@@ -76,8 +76,11 @@ Clear variant and the backdrop
 turns from a wash into the footage itself (sharper, larger canvas, less
 blur, proportions kept), so a reef video fills the whole page with fish
 while the glass lenses them. Neither end stops being glass: the tint stays
-between 0.12 and 0.88, frost never drops under 8 px, light keeps spilling
-in, and the rim brightens as the tint thins. On 動畫瘋 the cards follow the
+between 0.12 and 0.88, light keeps spilling in, and the rim brightens as the
+tint thins. Frost thins with it, down to a quarter of the Blur setting at
+100 % (2–6 px, glass rather than frosted glass); menus, and glass over
+content scrolling underneath, keep the full frost. At 100 % the backdrop is
+a 768×432 canvas with 1 px blur, so the footage behind the glass is sharp. On 動畫瘋 the cards follow the
 same axis: dense panels for running text up to 50 %, then Clear glass down to
 the same tint floor, so at 100 % the footage reads through them too. Reduce
 Transparency pins it at 50 %; Reduce Motion keeps the backdrop a wash.
@@ -91,7 +94,8 @@ Dark water stays vivid, only bright shoals are dimmed. The masthead's glass
 tint is solved the same way over what is really behind it (ambient → scrim
 map → player glow). Secondary text is raised (vibrancy) so the light can stay
 brighter at equal contrast, including YouTube's hashed design tokens, which
-are found by value in its stylesheets; on 動畫瘋 the same applies to the site's
+are found by value in its stylesheets, and its link blue (deepened on light
+pages, lifted on dark ones); on 動畫瘋 the same applies to the site's
 cyan accents and light-grey labels, which are lifted or deepened per theme.
 
 ## Languages

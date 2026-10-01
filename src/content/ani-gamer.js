@@ -48,7 +48,10 @@
   const fullFrost = (s) => s.blur * (1 + 0.25 * Math.max(0, (50 - s.transparency) / 50));
   function applyFrost() {
     const full = fullFrost(LG.settings);
-    const px = scrolled ? full : Math.max(Math.min(8, full), full * (1 - 0.5 * LG.immersion()));
+    // Clear glass (past the midpoint) frosts less, down to a quarter at 100 —
+    // a light 2–6 px that reads as glass, not frosted glass. Content
+    // scrolling underneath keeps the full frost (text under text).
+    const px = scrolled ? full : full * (1 - 0.75 * LG.immersion());
     const next = `${px.toFixed(1)}px`;
     if (next === frost) return;
     frost = next;
