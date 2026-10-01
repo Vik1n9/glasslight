@@ -8,6 +8,13 @@ legible.
 > Glasslight is an independent project. It is not affiliated with, endorsed
 > by, or sponsored by Apple Inc., Google LLC, or YouTube.
 
+## Supported sites
+
+- `www.youtube.com` — everything below.
+- `ani.gamer.com.tw` (巴哈姆特動畫瘋) — ambient light from the playing episode, glass top bars and
+  player controls, on the same Transparency slider. Entry point `src/content/ani-gamer.js`,
+  styles `src/styles/ani-gamer.css` (experimental).
+
 ## What it does
 
 | Layer (WWDC25 guidance) | YouTube | Treatment |

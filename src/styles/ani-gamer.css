@@ -1,0 +1,68 @@
+/* ==========================================================================
+   Glasslight — ani.gamer.com.tw layer. Loaded after glass.css, which supplies
+   the variables, #lg-ambient, .lg-glass and .lg-clear; this file only maps
+   them onto Bahamut's markup. Scoped to html.lg-ani.
+   ========================================================================== */
+
+/* Strip the page's opaque paint so #lg-ambient shows through. */
+html.lg-ani body,
+html.lg-ani .BH_background,
+html.lg-ani #BH_background,
+html.lg-ani .container-player,
+html.lg-ani .top_sky .sky .container-player,
+html.lg-ani .mainmenu ul {
+  background: transparent !important;
+}
+
+/* The bars are position: fixed; .lg-glass would otherwise make them relative. */
+html.lg-ani .sky.lg-glass,
+html.lg-ani .mainmenu.lg-glass {
+  position: fixed;
+  border-radius: 0 0 22px 22px !important;
+  border-bottom-color: transparent !important;
+}
+
+html.lg-ani .mainmenu.lg-glass::before {
+  display: none;
+}
+
+/* Fullscreen: the light is paused and hidden, letterbox areas stay black. */
+html.lg-ani:is(:fullscreen, :has(:fullscreen)),
+html.lg-ani:is(:fullscreen, :has(:fullscreen)) body {
+  background: #000 !important;
+}
+
+/* Popups float over arbitrary content: Regular glass, denser (menu alpha). */
+html.lg-ani :is(.user-setting-toolbox, .anime_search .anime_search-content, .app-download-toolbox) {
+  background:
+    linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
+    rgb(var(--lg-glass-rgb) / max(var(--lg-menu-alpha), var(--lg-glass-live, 0))) !important;
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(180%) !important;
+  backdrop-filter: blur(var(--lg-blur)) saturate(180%) !important;
+  border-radius: 18px !important;
+  box-shadow:
+    inset 0 1px 0 rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.5)),
+    inset 0 0 0 0.5px rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.35)),
+    0 10px 30px rgb(var(--lg-shadow-rgb) / var(--lg-shadow-alpha)) !important;
+}
+
+/* Player controls: Clear glass pill. The bar is a full-width strip, so it
+   must not shrink on :active like a button. */
+html.lg-ani .video-js .vjs-control-bar.lg-clear {
+  border-radius: 16px !important;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: auto;
+  transform: none !important;
+}
+
+html.lg-ani .video-js .vjs-control-bar.lg-clear :is(.vjs-control, .vjs-time-control) {
+  text-shadow: 0 0 6px rgb(0 0 0 / 0.55);
+}
+
+html.lg-ani.lg-reduce-transparency :is(.user-setting-toolbox, .anime_search .anime_search-content, .app-download-toolbox) {
+  background: rgb(var(--lg-glass-rgb) / 0.96) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}

@@ -190,7 +190,7 @@
 
   // Keep the glow canvas scaled onto the player's on-screen rect.
   function placeGlow() {
-    const player = video?.closest('.html5-video-player'); // #movie_player or #shorts-player
+    const player = video?.closest(playerSelector());
     if (!glow || !player) return;
     const r = player.getBoundingClientRect();
     // Side panels right of the player (playlist, live chat, recommendations
@@ -225,17 +225,17 @@
     glowClip.style.webkitMaskComposite = 'source-in';
   }
 
-  const SIDE_PANELS = [
-    '#secondary.ytd-watch-flexy',
-    '#panels-full-bleed-container.ytd-watch-flexy',
-    'ytd-live-chat-frame',
-  ];
+  // Site adapters (LG.site, e.g. ani-gamer.js) override these; the defaults
+  // are YouTube's: #movie_player / #shorts-player and its side panels.
+  const playerSelector = () => LG.site?.playerSelector || '.html5-video-player';
+  const SIDE_PANELS = () =>
+    LG.site?.sidePanels || ['#secondary.ytd-watch-flexy', '#panels-full-bleed-container.ytd-watch-flexy', 'ytd-live-chat-frame'];
 
   // Left edge of the nearest visible panel to the right of the player that
   // overlaps it vertically; innerWidth when there is none.
   function panelEdgeRightOf(r) {
     let edge = innerWidth;
-    for (const sel of SIDE_PANELS) {
+    for (const sel of SIDE_PANELS()) {
       const el = document.querySelector(sel);
       if (!el) continue;
       const p = el.getBoundingClientRect();
@@ -323,7 +323,7 @@
     videoBlocked = false;
     blackTicks = 0;
     playerResize.disconnect();
-    const player = video.closest('.html5-video-player');
+    const player = video.closest(playerSelector());
     if (player) playerResize.observe(player);
     glowKey = '';
     queueGlow();
@@ -610,7 +610,8 @@
   }
 
   // Everything that reads --lg-tint-rgb / --lg-glass-live in glass.css.
-  const GLASS_SCOPE = [
+  const GLASS_SCOPE = () => [
+    ...(LG.site?.glassScope || []),
     '.lg-glass',
     '.lg-clear',
     'ytd-menu-popup-renderer',
@@ -631,7 +632,7 @@
     if (!liveStyle?.isConnected) {
       liveStyle = document.createElement('style');
       liveStyle.id = 'lg-live-vars';
-      liveStyle.textContent = `html.lg-on :is(${GLASS_SCOPE}) {}`;
+      liveStyle.textContent = `html.lg-on :is(${GLASS_SCOPE()}) {}`;
       (document.head || document.documentElement).append(liveStyle);
     }
     return liveStyle.sheet.cssRules[0].style;

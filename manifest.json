@@ -49,6 +49,24 @@
     },
     {
       "matches": [
+        "https://ani.gamer.com.tw/*"
+      ],
+      "css": [
+        "src/styles/glass.css",
+        "src/styles/ani-gamer.css"
+      ],
+      "js": [
+        "src/content/settings.js",
+        "src/content/contrast.js",
+        "src/content/refract.js",
+        "src/content/ambient.js",
+        "src/content/ani-gamer.js",
+        "src/content/dev-reload.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
         "https://www.youtube.com/live_chat*",
         "https://www.youtube.com/live_chat_replay*"
       ],
