@@ -56,7 +56,8 @@ Site content shown in the screenshots belongs to its respective owners.
   watch history: ambient light from the playing episode (on browse pages, from
   the hovered or centred anime cover), floating glass top bars, glass menus,
   cards and panels, the player as a rounded card with a Clear glass control
-  bar, all on the same settings. Entry point `src/content/ani-gamer.js`,
+  bar (edge to edge in theater mode, with the header out of the way), all on
+  the same settings. Entry point `src/content/ani-gamer.js`,
   styles `src/styles/ani-gamer.css`.
 
 ## What it does
@@ -104,7 +105,7 @@ Chrome offers no way to change those at runtime.
 ## Install
 
 Download
-[glasslight-1.1.0.zip](https://github.com/Vik1n9/glasslight/releases/latest/download/glasslight-1.1.0.zip)
+[glasslight-1.1.1.zip](https://github.com/Vik1n9/glasslight/releases/latest/download/glasslight-1.1.1.zip)
 from [Releases](https://github.com/Vik1n9/glasslight/releases). Unzip it so the
 folder contains `manifest.json`, then `chrome://extensions` → Developer mode →
 **Load unpacked** → that folder. Chromium 116 or newer; Edge and Brave use the
