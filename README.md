@@ -10,6 +10,44 @@ legible.
 > by, or sponsored by Apple Inc., Google LLC, YouTube, or Bahamut (巴哈姆特).
 > Site names are used only to say where the extension works.
 
+## Screenshots
+
+**YouTube**
+
+<table>
+<tr>
+<td width="50%"><img src="store/screenshots/01-watch-dark.png" alt="YouTube watch page in dark theme: the video's colours light the whole page, with a glow behind the player and a glass masthead"></td>
+<td width="50%"><img src="store/screenshots/05-watch-light.png" alt="YouTube watch page in light theme with the same ambient light and glass surfaces"></td>
+</tr>
+<tr>
+<td>Watch page, dark theme: the playing video lights the page; glass masthead and Clear glass player controls.</td>
+<td>Light theme: the same light, with text kept at the contrast target.</td>
+</tr>
+</table>
+
+**巴哈姆特動畫瘋**
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/ani-watch-dark.jpg" alt="動畫瘋 watch page in dark theme: ambient light from the episode, floating glass top bars, a rounded player with a Clear glass control bar and a glass danmu column"></td>
+<td width="50%"><img src="docs/screenshots/ani-clear-glass.jpg" alt="動畫瘋 watch page at Transparency 100: the info panel, danmu column and top bars are Clear glass with the footage showing through"></td>
+</tr>
+<tr>
+<td>Watch page: light from the episode, floating glass bars, the player as a rounded card, glass danmu column.</td>
+<td>Transparency 100 (strongest light, least frost): cards and panels turn into Clear glass over the footage.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/ani-cards.jpg" alt="動畫瘋 anime list: glass anime cards over a page lit by the anime covers"></td>
+<td width="50%"><img src="docs/screenshots/ani-schedule.jpg" alt="動畫瘋 home page schedule: each weekday column is a glass card, today outlined in orange"></td>
+</tr>
+<tr>
+<td>Anime list: glass cards; with nothing playing, the hovered or centred cover lights the page.</td>
+<td>Schedule (週期表): every day column is a glass card, today keeps its orange outline.</td>
+</tr>
+</table>
+
+Site content shown in the screenshots belongs to its respective owners.
+
 ## Supported sites
 
 - `www.youtube.com` — watch pages, theater mode, Shorts, channels, search,
