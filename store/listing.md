@@ -23,7 +23,7 @@ Glasslight turns the video sites you watch on — YouTube™ and 巴哈姆特動
 • Frosted, refractive glass — the top bar, category bar, menus and player controls become floating glass with gentle refraction, a light-catching rim and adaptive shadows.
 • Text always stays readable — the extension measures the light behind the page several times a second and keeps text contrast at the WCAG 4.5:1 level you choose. Bright or dark footage, light or dark theme.
 • Works across YouTube — watch pages, theater mode, Shorts, channels, search, playlists, live chat and the miniplayer.
-• Also on Bahamut Anime Crazy (ani.gamer.com.tw) — ambient light from the playing episode, glass top bars, menus and player controls.
+• Also on Bahamut Anime Crazy (ani.gamer.com.tw) — ambient light from the playing episode or the anime cover you hover, glass top bars, menus and player controls.
 • Accessibility — honours Reduce Transparency, Increase Contrast and Reduce Motion, with a performance mode for older hardware.
 • Private by design — video frames are analysed on your device and never leave it. No analytics, no tracking, no remote code.
 • Six languages — English, Traditional Chinese, Simplified Chinese, Spanish, Japanese, Korean — switchable in the popup.
@@ -38,7 +38,7 @@ Restyles video sites (youtube.com, ani.gamer.com.tw) with a frosted-glass interf
 **Permission justifications**
 - `storage` — Saves the user's settings (on/off, light intensity, blur, transparency, contrast target, refraction, reduce transparency, performance mode, language).
 - Host permission `https://i.ytimg.com/*` — Reads YouTube thumbnail pixels (via the service worker) to colour the background when no video is playing. A page cannot read these pixels itself because the images are cross-origin.
-- Content scripts on `https://www.youtube.com/*` (including the live-chat frame) and `https://ani.gamer.com.tw/*` — Apply the glass styles and sample the playing video's frames locally for the ambient light and contrast calculation.
+- Content scripts on `https://www.youtube.com/*` (including the live-chat frame) and `https://ani.gamer.com.tw/*` — Apply the glass styles and sample the playing video's frames locally for the ambient light and contrast calculation. On ani.gamer.com.tw browse pages they also read the colours of anime covers from `p2.bahamut.com.tw`, which serves them to any site (CORS), so no extra host permission is needed.
 
 **Remote code:** No, I am not using remote code.
 

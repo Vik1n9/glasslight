@@ -10,6 +10,8 @@
    （未封裝安裝會自動重載，改檔後約 2 秒生效）
 3. 開 `https://ani.gamer.com.tw/animeVideo.php?sn=<任一集>`，並在首頁、搜尋頁各看一次
 
+自動化測試與開發工具只放在本機、不進版控（`.dev/`、`.scratch/` 已 gitignore）。
+
 ## 驗證清單
 
 - [x] 擴充功能有在動畫瘋載入（`html` 有 `lg-on`、`lg-ani` class）
@@ -35,7 +37,7 @@
 
 ## 已知缺口 / 後續
 
-- [ ] 非播放頁沒有縮圖取色，背景只有底色（需另外抓動畫瘋封面圖）
+- [x] 非播放頁縮圖取色：首頁、列表、搜尋、觀看紀錄以滑鼠所在或畫面中央的作品封面點亮背景（`p2.bahamut.com.tw` 有開 CORS，不需新增權限）
 - [x] 正式名稱改為 "Glasslight"；網站名稱只出現在說明中，六語系說明、README、PRIVACY、商店文案都附免責與商標聲明
 - [x] 重新產生宣傳圖，副標改為 "Glass & ambient light for video"（本機用 `NOTO_DIR=<字型資料夾>` 指定 Noto Sans）
 - [x] `PRIVACY.md` 與 `store/listing.md` 補上新增網站（單一用途與權限說明也已更新）

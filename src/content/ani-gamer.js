@@ -6,6 +6,10 @@
 (() => {
   const html = document.documentElement;
 
+  // Bahamut's image CDN answers with Access-Control-Allow-Origin: *, so the
+  // covers can be read without a host permission. Nothing else is fetched.
+  const THUMB_HOST = /^https:\/\/p2\.bahamut\.com\.tw\//;
+
   LG.site = {
     // The rounded player card. Not .video-js: Bahamut's <video-js> element is
     // display: inline and measures 0×0 (the <video> inside is positioned
@@ -14,6 +18,18 @@
     // The danmu / episode column beside the player.
     sidePanels: ['.container-player .subtitle'],
     glassScope: ['.user-setting-toolbox', '.anime_search .anime_search-content', '.app-download-toolbox'],
+    // Browse pages: the anime cards whose cover lights the page (thumbs.js).
+    // Home: new episodes, continue watching, extended cards; lists / search:
+    // .theme-list-main; watch history: the whole row (a .click-area link covers it).
+    thumbItems: '.anime-card-block, .continue-watch-card .img-block, .extend-card, .theme-list-main, .user-watch-list .anime-card',
+    thumbUrl: (item) => {
+      for (const img of item.querySelectorAll('img')) {
+        // Lazy images keep the real URL in data-src until they scroll in.
+        const url = [img.currentSrc, img.dataset.src, img.src].find((u) => THUMB_HOST.test(u || ''));
+        if (url) return url;
+      }
+      return '';
+    },
   };
 
   const NAV_GLASS = [
@@ -61,6 +77,7 @@
     if (!refractionOn()) LG.refract.detachAll();
     if (!s.enabled) {
       LG.ambient.stop();
+      LG.thumbs.disable();
       return;
     }
     LG.ambient.start();
@@ -90,6 +107,8 @@
     const v = isWatch() ? mainVideo() : null;
     if (v) LG.ambient.bindVideo(v);
     else LG.ambient.unbindVideo();
+    if (isWatch()) LG.thumbs.disable();
+    else LG.thumbs.enable();
     html.classList.toggle('lg-watch', isWatch());
     html.classList.toggle('lg-player-page', isWatch());
     decorate();

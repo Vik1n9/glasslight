@@ -60,6 +60,7 @@
         "src/content/contrast.js",
         "src/content/refract.js",
         "src/content/ambient.js",
+        "src/content/thumbs.js",
         "src/content/ani-gamer.js",
         "src/content/dev-reload.js"
       ],
