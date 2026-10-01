@@ -96,44 +96,43 @@ html.lg-ani .container-player .player .videoframe :is(.R18, .video-js) {
   border-radius: inherit;
 }
 
-/* Danmu / episode column: a content panel (fill, not glass), denser like
-   YouTube's engagement panels since it holds running text. */
-html.lg-ani .container-player .player .subtitle {
-  box-sizing: border-box;
-  border: solid transparent !important;
-  border-width: 0 16px 0 6px !important;
-  background: rgb(var(--lg-base) / 0.7) !important;
-  background-clip: padding-box !important;
-  border-radius: 36px 36px 36px 26px;
+/* ---------- Cards: one glass material for every content card ------------
+   Unlike YouTube (content as fills), every card on Bahamut — info panel,
+   comments, danmu column, anime / episode / news / history cards — is the
+   same glass: glass tint + light spill, frost, rim and a soft shadow. The
+   tint follows the Transparency slider like the menus but never drops below
+   0.6, where the panel text keeps its contrast on any frame. Cards nested in
+   another card (the rating box) stay fills: a backdrop-filter inside glass
+   could only blur the outer card's paint. */
+html.lg-ani {
+  --lg-card-alpha: max(0.6, calc(var(--lg-menu-alpha) * 0.85));
 }
 
-html.lg-ani[dark] .container-player .player .subtitle {
-  background: rgb(var(--lg-base) / 0.55) !important;
-  background-clip: padding-box !important;
-}
-
-html.lg-ani .container-player .player .subtitle :is(.sub_top, .ani-tabs-link, .ani-tab-content) {
-  background: transparent !important;
-}
-
-/* Title band: text straight on the page, like YouTube's watch title. */
-html.lg-ani .anime-title {
-  background: transparent !important;
-}
-
-/* Description / info box, comments: fills like YouTube's description, over a
-   base-colour wash. The scrim only guarantees contrast for the theme's grey
-   text on the bare page; these panels also hold Bahamut's cyan accents and
-   light-grey labels, and a bare fill (white in dark theme) would lift the
-   backdrop past the scrim's budget on bright frames. */
-html.lg-ani section.data,
-html.lg-ani .commend-title .filter-nav,
-html.lg-ani .webview_commendlist {
+html.lg-ani :is(
+  section.data,
+  .commend-title .filter-nav,
+  .webview_commendlist,
+  .theme-list-main,
+  .anime-card-block,
+  .extend-card,
+  .user-watch-list .anime-card
+),
+html.lg-ani .container-player .player .subtitle::before {
   background:
-    linear-gradient(rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)), rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha))),
-    rgb(var(--lg-base) / 0.6) !important;
+    linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
+    rgb(var(--lg-glass-rgb) / var(--lg-card-alpha)) !important;
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(160%) !important;
+  backdrop-filter: blur(var(--lg-blur)) saturate(160%) !important;
   border: 0 !important;
-  box-shadow: inset 0 0 0 0.5px rgb(var(--lg-fill-rgb) / 0.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.5)),
+    inset 0 0 0 0.5px rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.35)),
+    0 4px 16px rgb(var(--lg-shadow-rgb) / calc(var(--lg-shadow-alpha) * 0.6)) !important;
+}
+
+html.lg-ani :is(.theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card) {
+  border-radius: 16px !important;
+  overflow: hidden;
 }
 
 html.lg-ani section.data {
@@ -149,11 +148,67 @@ html.lg-ani .webview_commendlist {
   border-radius: 0 0 20px 20px !important;
 }
 
-html.lg-ani section.data .BH-rbox,
-html.lg-ani .old_list :is(.theme-list-main, .theme-info-block) {
+/* Danmu / episode column: inset by transparent borders so Bahamut's
+   percentage widths still add up; a backdrop-filter would frost the borders
+   too, so the glass is drawn on a ::before over the padding box. */
+html.lg-ani .container-player .player .subtitle {
+  /* Bahamut positions it absolutely, which already anchors the ::before. */
+  isolation: isolate;
+  box-sizing: border-box;
+  border: solid transparent !important;
+  border-width: 0 16px 0 6px !important;
+  background: transparent !important;
+  border-radius: 36px 36px 36px 26px;
+}
+
+html.lg-ani .container-player .player .subtitle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  /* outer 36 36 36 26 minus the 6px / 16px insets */
+  border-radius: 30px 20px 20px 20px;
+  pointer-events: none;
+}
+
+html.lg-ani .container-player .player .subtitle :is(.sub_top, .ani-tabs-link, .ani-tab-content) {
+  background: transparent !important;
+}
+
+/* The cards' own inner white blocks would hide the glass. */
+html.lg-ani :is(.theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card) :is(.theme-info-block, .anime-detail-block, .extend-content-block, .anime-content-block) {
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+
+/* Title band: text straight on the page, like YouTube's watch title. */
+html.lg-ani .anime-title {
+  background: transparent !important;
+}
+
+/* Nested in the info panel: a fill, not glass on glass. */
+html.lg-ani section.data .BH-rbox {
   background: rgb(var(--lg-fill-rgb) / var(--lg-fill-alpha)) !important;
   border-radius: 16px !important;
   box-shadow: none !important;
+}
+
+/* Performance: no frost on the many cards, a denser tint instead.
+   Reduce Transparency: near-solid, like glass.css does for the bars. */
+html.lg-ani.lg-perf :is(section.data, .commend-title .filter-nav, .webview_commendlist, .theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card),
+html.lg-ani.lg-perf .container-player .player .subtitle::before {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background:
+    linear-gradient(rgb(var(--lg-tint-rgb) / var(--lg-spill)), rgb(var(--lg-tint-rgb) / var(--lg-spill))),
+    rgb(var(--lg-glass-rgb) / min(0.92, calc(var(--lg-card-alpha) + 0.12))) !important;
+}
+
+html.lg-ani.lg-reduce-transparency :is(section.data, .commend-title .filter-nav, .webview_commendlist, .theme-list-main, .anime-card-block, .extend-card, .user-watch-list .anime-card),
+html.lg-ani.lg-reduce-transparency .container-player .player .subtitle::before {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: rgb(var(--lg-glass-rgb) / 0.96) !important;
 }
 
 /* Bahamut's cyan accents are tuned for a white page (#00b4d8 is only 2.3:1
@@ -171,15 +226,6 @@ html.lg-ani:not([dark]) section.data :is(.user-score-more, .user-score-more *) {
 
 html.lg-ani[dark] section.data :is(.user-score-more, .user-score-more *) {
   color: #28c8ce !important;
-}
-
-html.lg-ani .old_list .theme-list-main {
-  overflow: hidden;
-}
-
-html.lg-ani .old_list .theme-info-block {
-  background: transparent !important;
-  border-radius: 0 !important;
 }
 
 /* Fullscreen: the light is paused and hidden, letterbox areas stay black. */

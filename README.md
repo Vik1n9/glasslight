@@ -14,7 +14,7 @@ legible.
 
 - `www.youtube.com` — everything below.
 - `ani.gamer.com.tw` (巴哈姆特動畫瘋) — ambient light from the playing episode (on browse pages,
-  from the hovered or centred anime cover), glass top bars, menus and player controls, on the same
+  from the hovered or centred anime cover), glass top bars, menus, cards and player controls, on the same
   Transparency slider. Entry point `src/content/ani-gamer.js`,
   styles `src/styles/ani-gamer.css` (experimental).
 

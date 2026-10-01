@@ -23,7 +23,7 @@ Glasslight turns the video sites you watch on — YouTube™ and 巴哈姆特動
 • Frosted, refractive glass — the top bar, category bar, menus and player controls become floating glass with gentle refraction, a light-catching rim and adaptive shadows.
 • Text always stays readable — the extension measures the light behind the page several times a second and keeps text contrast at the WCAG 4.5:1 level you choose. Bright or dark footage, light or dark theme.
 • Works across YouTube — watch pages, theater mode, Shorts, channels, search, playlists, live chat and the miniplayer.
-• Also on Bahamut Anime Crazy (ani.gamer.com.tw) — ambient light from the playing episode or the anime cover you hover, glass top bars, menus and player controls.
+• Also on Bahamut Anime Crazy (ani.gamer.com.tw) — ambient light from the playing episode or the anime cover you hover, glass top bars, menus, cards and player controls.
 • Accessibility — honours Reduce Transparency, Increase Contrast and Reduce Motion, with a performance mode for older hardware.
 • Private by design — video frames are analysed on your device and never leave it. No analytics, no tracking, no remote code.
 • Six languages — English, Traditional Chinese, Simplified Chinese, Spanish, Japanese, Korean — switchable in the popup.
