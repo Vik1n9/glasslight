@@ -179,7 +179,13 @@
           return;
         }
         vec2 e = d / t; // where this ray leaves the picture
-        float len = clamp(0.03 + 0.12 * (t - 1.0), 0.03, 0.45);
+        // The canvas only reaches ~106% past the picture's own edges (see the
+        // -6%/112% inset in glass.css), so t tops out around 1.5-2 for a
+        // typical player — nowhere near where the old, gently-sloped curve
+        // widened the taps enough to stop reading as a sharp, flat-coloured
+        // patch. Ramp steeply instead, so it is already a soft, near-average
+        // wash well inside that reachable range instead of a hard-edged one.
+        float len = clamp(0.03 + 0.7 * (t - 1.0), 0.03, 0.92);
         vec3 acc = vec3(0.0);
         for (int i = 0; i < TAPS; i++) {
           float f = 1.0 - len * float(i) / float(TAPS - 1);
