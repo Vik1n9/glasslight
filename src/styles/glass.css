@@ -735,10 +735,12 @@ html.lg-on.lg-cards :is(
 )::before {
   content: "";
   position: absolute;
-  inset: -8px -10px;
+  /* Reaches into the gap around the box, never into the next card's:
+     YouTube spaces the columns 16 px apart and the related list 8 px. */
+  inset: -8px -6px;
   z-index: -1;
   pointer-events: none;
-  border-radius: 18px;
+  border-radius: 16px;
   /* No light spill: the contrast solve counts only this white over the
      backdrop, and a spill of the footage's colour would darken it. */
   background: rgb(var(--lg-glass-rgb) / max(var(--lg-card-alpha), var(--lg-card-live, 0.9)));
@@ -748,6 +750,17 @@ html.lg-on.lg-cards :is(
     inset 0 1px 0 rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.5)),
     inset 0 0 0 0.5px rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.35)),
     0 4px 16px rgb(var(--lg-shadow-rgb) / calc(var(--lg-shadow-alpha) * 0.6));
+}
+
+html.lg-on.lg-cards :is(
+  yt-related-chip-cloud-renderer,
+  #related yt-lockup-view-model,
+  #related ytd-compact-video-renderer,
+  #related ytd-compact-radio-renderer,
+  #related ytd-compact-playlist-renderer
+)::before {
+  inset: -3px -6px;
+  border-radius: 14px;
 }
 
 /* Boxed panels: the card is the panel itself (the chat frame clips). */

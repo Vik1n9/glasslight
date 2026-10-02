@@ -845,12 +845,14 @@
   let scrimRaf = 0;
   let scrimDark = null;
 
-  function solveScrimMap(px, opacity, dark) {
+  function solveScrimMap(px, opacity, dark, cards) {
     // Per cell there is no page-wide worst case to hide model error behind
     // (glass shadows, the ¼ s between ticks, the drift): keep 5 % in hand,
     // 10 % for sharp immersive footage, where a fish can cross small text
-    // between two ticks.
-    const target = LG.settings.contrastTarget * (1.05 + 0.05 * clarity);
+    // between two ticks. On content cards YouTube's own black fills sit on
+    // top as well (description box 5 %, playing playlist row ~11 %), which
+    // darken the card under the text: 12 % more for those.
+    const target = LG.settings.contrastTarget * (1.05 + 0.05 * clarity) * (cards ? 1.12 : 1);
     for (let c = 0; c < cellSamples.length; c += 1) {
       const idx = cellSamples[c];
       const buf = cellPx[c];
@@ -992,11 +994,11 @@
     const px = lastPx;
     const dark = LG.isDarkTheme();
     const opacity = ambientOpacity();
-    solveScrimMap(px, opacity, dark);
     // Content cards (main.js sets lg-cards: YouTube's light watch page): the
     // text sits on frosted cards instead, each tinted at least the scrim the
     // worst cell would need, and the backdrop between them stays unwashed.
     const cards = document.documentElement.classList.contains('lg-cards');
+    solveScrimMap(px, opacity, dark, cards);
     let cardTint = 0;
     if (cards) for (let c = 0; c < cellScrim.length; c += 1) cardTint = Math.max(cardTint, cellScrim[c]);
     const scrimShown = cards ? NO_SCRIM : cellScrim;

@@ -67,7 +67,8 @@ function render(settings) {
   document.body.classList.toggle('off', !settings.enabled);
 }
 
-chrome.storage.sync.get(DEFAULTS).then(render);
+// Older versions stored contrast targets up to 7; the slider now ends at 4.5.
+chrome.storage.sync.get(DEFAULTS).then((s) => render({ ...s, contrastTarget: Math.min(4.5, Math.max(1.5, Number(s.contrastTarget) || 4.5)) }));
 
 for (const input of inputs) {
   input.addEventListener('input', () => {
