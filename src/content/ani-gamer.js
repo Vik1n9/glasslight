@@ -17,6 +17,9 @@
     playerSelector: '.videoframe .video',
     // The danmu / episode column beside the player.
     sidePanels: ['.container-player .subtitle'],
+    // The anime's description block under the title strip: the enlarged
+    // backdrop stops there (ambient.js enlargedBox).
+    description: 'section.data',
     glassScope: ['.user-setting-toolbox', '.anime_search .anime_search-content', '.app-download-toolbox', '.btn-newanime-filter .filter-items'],
     // Browse pages: the anime cards whose cover lights the page (thumbs.js).
     // Home: new episodes, continue watching, extended cards; lists / search:
