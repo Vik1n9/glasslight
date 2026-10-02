@@ -65,7 +65,7 @@ Site content shown in the screenshots belongs to its respective owners.
 | Layer (WWDC25 guidance) | YouTube | 動畫瘋 | Treatment |
 |---|---|---|---|
 | Background | whole page | whole page | `#lg-ambient`: the playing picture as one of three Backdrop modes (popup) — Hybrid (default): enlarged behind the player, with radial light from the frame's edges past it; Enlarged: the frame enlarged over the viewport; Radial: the picture's edges streamed outward from the player (Hybrid and Radial need WebGL, else Enlarged) — or the hovered / centred thumbnail or cover blurred over it, plus a glow behind the player |
-| Content | videos, description, comments, panels | info panel, comments, danmu column, anime / episode / news / history cards, schedule | YouTube: no glass — fills and transparency. 動畫瘋: one card glass for every card (a dense panel up to the Transparency midpoint, Clear glass past it) |
+| Content | videos, description, comments, panels | info panel, comments, danmu column, anime / episode / news / history cards, schedule | YouTube: fills and transparency; on the light watch page, frosted cards (the backdrop between them stays unwashed). 動畫瘋: one card glass for every card (a dense panel up to the Transparency midpoint, Clear glass past it) |
 | Navigation | masthead, chip bar, menus, drawer | top bar, main menu, user menu, search suggestions, sort and APP menus | Regular glass: frost + refraction + specular rim + adaptive shadow |
 | Over media | player controls, Shorts actions | player control bar | Clear glass, 35% dimming layer over bright footage |
 
@@ -93,7 +93,12 @@ Transparency pins it at 50 %; Reduce Motion keeps the backdrop a wash.
 smallest scrim alpha that keeps the worst sampled pixel there at the target
 WCAG contrast (default 4.5:1) against the weakest text colour, with 5 %
 headroom (10 % for sharp immersive footage); the map is dilated by a cell and stretched smoothly over the page.
-Dark water stays vivid, only bright shoals are dimmed. The masthead's glass
+Dark water stays vivid, only bright shoals are dimmed. On a light page dark
+text needs a bright backdrop, which over most footage meant a ~70 % white
+scrim everywhere; so YouTube's light watch page puts its text on frosted
+cards instead, tinted from what the worst cell would need (drawn at 70 % of
+it: the solve is a worst case, and tested by eye the text reads fine with
+clearer cards), and leaves the backdrop between them unscrimmed. The masthead's glass
 tint is solved the same way over what is really behind it (ambient → scrim
 map → player glow). Secondary text is raised (vibrancy) so the light can stay
 brighter at equal contrast, including YouTube's hashed design tokens, which

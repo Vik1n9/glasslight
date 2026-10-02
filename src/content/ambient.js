@@ -157,16 +157,18 @@
   //  - 'hybrid' (default), described below.
   //
   // Hybrid draws two layers in one pass, both anchored to the picture on screen:
-  //  - behind the player, the frame enlarged K:1 around the picture's centre
-  //    (the original full-bleed wash, now centred on the player);
-  //  - past the enlarged frame's edge, radial light: every pixel takes the
-  //    colour of the frame's outermost band where its ray leaves the picture,
-  //    spread along that edge more and more with distance.
+  //  - behind the player, the frame enlarged around the picture's centre, out
+  //    to a box fitted to the page (see enlargedBox): each side of the box is
+  //    reached by scaling that half of the frame, so the frame stays
+  //    continuous while e.g. stopping at a side panel on one side only;
+  //  - past the box, radial light: every pixel takes the colour of the
+  //    frame's outermost band where its ray leaves the box, spread along that
+  //    edge more and more with distance.
   // Burned-in subtitles (動畫瘋, many YouTube uploads) sit ~10-25 % above the
   // frame's bottom edge. The radial light never reaches further into the frame
-  // than its outer band, and under the player — where the enlarged frame would
-  // put the subtitle line right over the title — the light starts at the
-  // player's edge instead, so the subtitles never show outside the player.
+  // than its outer band, and straight under the player — where the enlarged
+  // frame would put the subtitle line right over the title — the box shows
+  // the frame's bottom band (below the subtitles) stretched down instead.
   // A per-pixel mapping needs a shader; without WebGL the backdrop falls back
   // to the enlarged frame.
   const radial = (() => {
@@ -189,15 +191,19 @@
       precision mediump float;
       uniform sampler2D tex;
       uniform vec4 rect; // picture in canvas uv: centre.xy, half size.zw
-      uniform vec2 zone; // x = enlargement K, y = t at the canvas edge
+      uniform vec4 box; // enlarged frame's edges in picture halves: left, top, right, bottom
+      uniform float reach; // box-relative t at the canvas edge
       uniform bool hybrid; // false: plain radial extension
       varying vec2 uv;
       const int TAPS = ${TAPS_JS};
       const float BAND = 0.06; // how far inside the edge the light is taken from
+      // Bottom band stretched under the player. Subtitles can sit low: on a
+      // YouTube upload measured live they reached 96 % of the way down.
+      const float SUB = 0.025;
       void main() {
         vec2 d = (uv - rect.xy) / rect.zw; // ±1 on the picture's edges
-        float t = max(abs(d.x), abs(d.y));
         if (!hybrid) {
+          float t = max(abs(d.x), abs(d.y));
           if (t <= 1.0) {
             gl_FragColor = vec4(texture2DLodEXT(tex, d * 0.5 + 0.5, 0.0).rgb, 1.0);
             return;
@@ -215,26 +221,28 @@
           gl_FragColor = vec4(sum / float(TAPS), 1.0);
           return;
         }
-        // Under the player the enlarged frame would show the frame's lower
-        // band — where burned-in subtitles sit — right over the title. There
-        // the edge light starts at the player itself; eased in across the
-        // player's bottom corners.
-        float under = smoothstep(0.9, 1.05, d.y) * (1.0 - smoothstep(0.8, 1.2, abs(d.x)));
-        if (t <= zone.x && under <= 0.0) {
-          gl_FragColor = vec4(texture2DLodEXT(tex, d / zone.x * 0.5 + 0.5, 0.0).rgb, 1.0);
+        // Box-relative position: each half of the frame is scaled to its own
+        // side of the box, so n is ±1 on the box's edges.
+        vec2 k = vec2(d.x < 0.0 ? box.x : box.z, d.y < 0.0 ? box.y : box.w);
+        vec2 n = d / k;
+        float t = max(abs(n.x), abs(n.y));
+        if (t <= 1.0) {
+          // Straight under the player the frame's bottom band, stretched from
+          // the player's edge to the box's; eased in across its corners.
+          float under = smoothstep(0.98, 1.0, d.y) * (1.0 - smoothstep(0.8, 1.2, abs(d.x)));
+          float band = 1.0 - SUB * (1.0 - clamp((d.y - 1.0) / max(k.y - 1.0, 0.001), 0.0, 1.0));
+          vec2 s = vec2(n.x, mix(n.y, band, under));
+          gl_FragColor = vec4(texture2DLodEXT(tex, s * 0.5 + 0.5, 0.0).rgb, 1.0);
           return;
         }
-        vec2 e = d / t; // unit ray (Chebyshev): where it leaves the picture
+        vec2 e = n / t; // unit ray (Chebyshev): where it leaves the box
         // Along the edge the ray leaves through: horizontal on the top and
         // bottom edges, vertical on the sides, eased across the corners.
         float side = smoothstep(-0.12, 0.12, abs(e.x) - abs(e.y));
         vec2 along = normalize(mix(vec2(1.0, 0.0), vec2(0.0, 1.0), side));
         // Spread measured as a fraction of what is left to the canvas edge, so
-        // it reaches the cap at the page edge in every layout (tMax ranges from
-        // ~1.3 in theater to ~5 on Shorts). The light starts at the enlarged
-        // frame's edge, or at the picture's own edge under the player.
-        float t0 = mix(zone.x, 1.0, under);
-        float u = clamp((t - t0) / max(zone.y - t0, 0.001), 0.0, 1.0);
+        // it reaches the cap at the page edge in every layout.
+        float u = clamp((t - 1.0) / max(reach - 1.0, 0.001), 0.0, 1.0);
         float spread = mix(0.03, 0.7, u);
         vec2 q = e * (1.0 - BAND * min(1.0, u * 8.0)); // starts at the very edge: no seam
         vec3 acc = vec3(0.0);
@@ -244,15 +252,14 @@
           float s = spread * (float(i) / float(TAPS - 1) * 2.0 - 1.0);
           acc += texture2DLodEXT(tex, (q + along * s) * 0.5 + 0.5, lod).rgb; // clamped
         }
-        vec3 light = acc / float(TAPS);
-        if (t <= zone.x) light = mix(texture2DLodEXT(tex, d / zone.x * 0.5 + 0.5, 0.0).rgb, light, under);
-        gl_FragColor = vec4(light, 1.0);
+        gl_FragColor = vec4(acc / float(TAPS), 1.0);
       }`;
 
     let canvas;
     let gl;
     let rectLoc;
-    let zoneLoc;
+    let boxLoc;
+    let reachLoc;
     let hybridLoc;
     let src;
     let sctx2;
@@ -290,7 +297,8 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       rectLoc = gl.getUniformLocation(prog, 'rect');
-      zoneLoc = gl.getUniformLocation(prog, 'zone');
+      boxLoc = gl.getUniformLocation(prog, 'box');
+      reachLoc = gl.getUniformLocation(prog, 'reach');
       hybridLoc = gl.getUniformLocation(prog, 'hybrid');
       src = new OffscreenCanvas(SRC, SRC);
       sctx2 = src.getContext('2d');
@@ -300,10 +308,9 @@
 
     /**
      * Render the cropped frame (sx, sy, sw, sh of the video) radiating from
-     * `rect` (canvas uv: cx, cy, half w, half h). `zone` is [K, tMax]: the
-     * enlargement of the frame behind the player, and how far the canvas
-     * extends past the picture; `hybrid` false draws the plain radial
-     * extension instead. False when WebGL is unavailable or lost;
+     * `rect` (canvas uv: cx, cy, half w, half h). `zone` is enlargedBox():
+     * the enlarged frame's edges and how far the canvas reaches past them;
+     * `hybrid` false draws the plain radial extension instead. False when WebGL is unavailable or lost;
      * tainted media throws, like any other draw path.
      */
     function render(el, sx, sy, sw, sh, rect, zone, hybrid) {
@@ -325,7 +332,8 @@
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.uniform4f(rectLoc, rect[0], rect[1], rect[2], rect[3]);
-      gl.uniform2f(zoneLoc, zone[0], zone[1]);
+      gl.uniform4f(boxLoc, ...zone.box);
+      gl.uniform1f(reachLoc, zone.reach);
       gl.uniform1i(hybridLoc, hybrid ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       return true;
@@ -364,8 +372,19 @@
     const w = video.videoWidth * k;
     const h = video.videoHeight * k;
     const next = { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h };
+    // What the enlarged frame stops at (enlargedBox): a side panel right of
+    // the player, and the description under it.
+    const player = video.closest(playerSelector());
+    const panel = player ? panelEdgeRightOf(player.getBoundingClientRect()) : innerWidth;
+    next.panel = panel < innerWidth ? panel : null;
+    const desc = document.querySelector(DESCRIPTION());
+    const dr = desc?.getBoundingClientRect();
+    next.desc = dr?.height && dr.top >= next.y + h - 1 ? dr.top : null;
     const moved =
-      !picBox || Math.abs(next.x - picBox.x) + Math.abs(next.y - picBox.y) + Math.abs(next.w - picBox.w) + Math.abs(next.h - picBox.h) > 1;
+      !picBox ||
+      Math.abs(next.x - picBox.x) + Math.abs(next.y - picBox.y) + Math.abs(next.w - picBox.w) + Math.abs(next.h - picBox.h) > 1 ||
+      Math.abs((next.panel ?? -1) - (picBox.panel ?? -1)) > 1 ||
+      Math.abs((next.desc ?? -1) - (picBox.desc ?? -1)) > 1;
     picBox = next;
     return moved;
   }
@@ -387,11 +406,18 @@
     ];
   }
 
-  // How far the canvas reaches past the picture, in picture-half units (t),
-  // and how much the frame behind the player is enlarged. Both from the same
-  // rect.
+  // The enlarged frame's box behind the player, as its left, top, right and
+  // bottom edges in picture halves from the picture's centre (1 = the
+  // picture's own edge), and how far the canvas reaches past the box.
   //
-  // K cannot be a constant: the canvas only reaches ~106 % past the picture's
+  // Beside a side panel (YouTube's playlist / recommendations column, 動畫瘋's
+  // danmu column) the box is fitted to the page: right edge at the panel,
+  // bottom edge at the description under the player, top and left at the
+  // viewport's edges. Radial light takes over past the panel and below the
+  // description.
+  //
+  // Otherwise (theater, Shorts) the frame is enlarged K:1 on every side. K
+  // cannot be a constant: the canvas only reaches ~106 % past the picture's
   // own edges (the -6 %/112 % inset in glass.css), and that reach varies a lot
   // with layout — tMax ~2.4 on a default watch page, ~1.5 in theater, ~5 on a
   // portrait Short. So K is capped by the reach, floored so the enlarged frame
@@ -400,16 +426,39 @@
   const K_MIN = 1.1;
   const MIN_RADIAL = 0.25; // t kept for the radial light past the frame
 
-  function radialZone(rect) {
-    // The shader's t is a Chebyshev norm, so the canvas corners bound it.
-    let tMax = 0;
+  function enlargedBox(rect) {
+    const [cx, cy, hw, hh] = rect;
+    // Viewport px → canvas uv (the canvas box is inset -6 % and 112 % large).
+    const ux = (px) => (px / viewW + 0.06) / 1.12;
+    const uy = (px) => (px / viewH + 0.06) / 1.12;
+    let box;
+    if (picBox.panel != null) {
+      const side = (k) => Math.max(1.001, k);
+      box = [
+        side((cx - ux(0)) / hw),
+        side((cy - uy(0)) / hh),
+        side((ux(picBox.panel) - cx) / hw),
+        side(((picBox.desc != null ? uy(picBox.desc) : uy(viewH)) - cy) / hh),
+      ];
+    } else {
+      // The shader's t is a Chebyshev norm, so the canvas corners bound it.
+      let tMax = 0;
+      for (const u of [0, 1]) {
+        for (const v of [0, 1]) tMax = Math.max(tMax, Math.abs((u - cx) / hw), Math.abs((v - cy) / hh));
+      }
+      const k = Math.max(K_MIN, Math.min(K_WANT, tMax - MIN_RADIAL));
+      box = [k, k, k, k];
+    }
+    // Box-relative t of the canvas corners, as the shader measures it.
+    let reach = 0;
     for (const u of [0, 1]) {
       for (const v of [0, 1]) {
-        const t = Math.max(Math.abs((u - rect[0]) / rect[2]), Math.abs((v - rect[1]) / rect[3]));
-        if (t > tMax) tMax = t;
+        const dx = (u - cx) / hw;
+        const dy = (v - cy) / hh;
+        reach = Math.max(reach, Math.abs(dx) / (dx < 0 ? box[0] : box[2]), Math.abs(dy) / (dy < 0 ? box[1] : box[3]));
       }
     }
-    return [Math.max(K_MIN, Math.min(K_WANT, tMax - MIN_RADIAL)), tMax];
+    return { box, reach };
   }
 
   // The drift would slide the backdrop out of line with the player.
@@ -435,7 +484,7 @@
     const filter = clarity ? `blur(${(2 - 1.4 * clarity).toFixed(2)}px) saturate(1.35)` : 'blur(2px) saturate(1.35)';
     const mode = LG.settings.backdrop;
     const rect = mode !== 'enlarged' && radialRect();
-    const zone = rect && radialZone(rect);
+    const zone = rect && enlargedBox(rect);
     if (rect && radial.render(video, sx, sy, sw, sh, rect, zone, mode !== 'radial')) {
       dctx.globalAlpha = alpha;
       dctx.filter = filter;
@@ -548,6 +597,7 @@
   // Site adapters (LG.site, e.g. ani-gamer.js) override these; the defaults
   // are YouTube's: #movie_player / #shorts-player and its side panels.
   const playerSelector = () => LG.site?.playerSelector || '.html5-video-player';
+  const DESCRIPTION = () => LG.site?.description || '#description.ytd-watch-metadata';
   const SIDE_PANELS = () =>
     LG.site?.sidePanels || ['#secondary.ytd-watch-flexy', '#panels-full-bleed-container.ytd-watch-flexy', 'ytd-live-chat-frame'];
 
@@ -791,15 +841,18 @@
   const rawScrim = new Float32Array(GRID_X * GRID_Y);
   const cellScrim = new Float32Array(GRID_X * GRID_Y); // dilated + smoothed
   const shownScrim = new Float32Array(GRID_X * GRID_Y); // what the canvas shows
+  const NO_SCRIM = new Float32Array(GRID_X * GRID_Y);
   let scrimRaf = 0;
   let scrimDark = null;
 
-  function solveScrimMap(px, opacity, dark) {
+  function solveScrimMap(px, opacity, dark, cards) {
     // Per cell there is no page-wide worst case to hide model error behind
     // (glass shadows, the ¼ s between ticks, the drift): keep 5 % in hand,
     // 10 % for sharp immersive footage, where a fish can cross small text
-    // between two ticks.
-    const target = LG.settings.contrastTarget * (1.05 + 0.05 * clarity);
+    // between two ticks. On content cards YouTube's own black fills sit on
+    // top as well (description box 5 %, playing playlist row ~11 %), which
+    // darken the card under the text: 12 % more for those.
+    const target = LG.settings.contrastTarget * (1.05 + 0.05 * clarity) * (cards ? 1.12 : 1);
     for (let c = 0; c < cellSamples.length; c += 1) {
       const idx = cellSamples[c];
       const buf = cellPx[c];
@@ -859,7 +912,7 @@
   // that one capsule its own fill rather than tinting the whole bar.)
   // `gpx` holds the glow's top rows in the layout of `px` (by default the
   // display, which is the frame everywhere but in the radial backdrop).
-  function mastheadFloor(px, gpx, opacity, glowOpacity, dark) {
+  function mastheadFloor(px, gpx, opacity, glowOpacity, dark, scrimMap) {
     const { base } = dark ? LG.contrast.THEMES.dark : LG.contrast.THEMES.light;
     const L = LG.contrast.luminance;
     // Worst pixel of a column: brightest on a dark page, darkest on a light one.
@@ -872,7 +925,7 @@
       let g = x * 4;
       for (let y = 1; y < GLOW_ROWS; y += 1) g = worseG(g, (y * SAMPLE_W + x) * 4);
       const cell = Math.min(GRID_X - 1, Math.max(0, Math.floor((-0.06 + (1.12 * (x + 0.5)) / SAMPLE_W) * GRID_X)));
-      const scrim = cellScrim[cell];
+      const scrim = scrimMap[cell];
       for (let ch = 0; ch < 3; ch += 1) {
         let v = base[ch] + (px[a + ch] - base[ch]) * opacity;
         v += (base[ch] - v) * scrim;
@@ -884,9 +937,9 @@
   }
 
   // Ease the canvas to the new map over ~¼ s (the tick interval).
-  function paintScrim(dark) {
+  function paintScrim(dark, target) {
     let changed = dark !== scrimDark;
-    for (let c = 0; c < cellScrim.length && !changed; c += 1) changed = Math.abs(cellScrim[c] - shownScrim[c]) > 0.004;
+    for (let c = 0; c < target.length && !changed; c += 1) changed = Math.abs(target[c] - shownScrim[c]) > 0.004;
     if (!changed) return;
     scrimDark = dark;
     const [r, g, b] = dark ? LG.contrast.THEMES.dark.base : LG.contrast.THEMES.light.base;
@@ -896,8 +949,8 @@
     cancelAnimationFrame(scrimRaf);
     const step = (now) => {
       const f = from[0] < 0 || LG.prefersReducedMotion() ? 1 : Math.min(1, (now - t0) / 240);
-      for (let c = 0; c < cellScrim.length; c += 1) {
-        shownScrim[c] = f === 1 ? cellScrim[c] : from[c] + (cellScrim[c] - from[c]) * f;
+      for (let c = 0; c < target.length; c += 1) {
+        shownScrim[c] = f === 1 ? target[c] : from[c] + (target[c] - from[c]) * f;
         d[c * 4] = r;
         d[c * 4 + 1] = g;
         d[c * 4 + 2] = b;
@@ -941,7 +994,14 @@
     const px = lastPx;
     const dark = LG.isDarkTheme();
     const opacity = ambientOpacity();
-    solveScrimMap(px, opacity, dark);
+    // Content cards (main.js sets lg-cards: YouTube's light watch page): the
+    // text sits on frosted cards instead, each tinted at least the scrim the
+    // worst cell would need, and the backdrop between them stays unwashed.
+    const cards = document.documentElement.classList.contains('lg-cards');
+    solveScrimMap(px, opacity, dark, cards);
+    let cardTint = 0;
+    if (cards) for (let c = 0; c < cellScrim.length; c += 1) cardTint = Math.max(cardTint, cellScrim[c]);
+    const scrimShown = cards ? NO_SCRIM : cellScrim;
     const { rgb, lum } = LG.contrast.dominantColor(px);
 
     // Navigation glass floats over the unscrimmed glow (masthead sits on its
@@ -960,7 +1020,7 @@
     }
     // Headroom for the saturate() in the glass backdrop-filter.
     const gpx = lastGlowPx || px;
-    const floor = mastheadFloor(px, gpx, opacity, glowOpacity, dark);
+    const floor = mastheadFloor(px, gpx, opacity, glowOpacity, dark, scrimShown);
     const glass = floor > 0 ? Math.min(0.92, floor + 0.08) : 0;
     glassAlpha = glass > glassAlpha ? glass : glassAlpha + (glass - glassAlpha) * 0.15;
     // Converged once the quantized value (1/50 steps) can no longer move.
@@ -972,7 +1032,7 @@
 
     // Light-layer values live on #lg-ambient: changing them restyles only
     // its three children, not the whole page. The scrim is a canvas.
-    paintScrim(dark);
+    paintScrim(dark, scrimShown);
     const a = root.style;
     setVar(a, '--lg-ambient-opacity', opacity.toFixed(2));
     setVar(a, '--lg-glow-opacity', glowOpacity.toFixed(2));
@@ -984,11 +1044,15 @@
     const g = liveRule();
     setVar(g, '--lg-glass-live', (Math.round(glassAlpha * 50) / 50).toFixed(2));
     setVar(g, '--lg-tint-rgb', rgb.map((c) => Math.round(c / 8) * 8).join(' '));
+    // Rounded up, never below what the text needs.
+    setVar(g, '--lg-card-live', (Math.ceil(cardTint * 50) / 50).toFixed(2));
   }
 
-  // Everything that reads --lg-tint-rgb / --lg-glass-live in glass.css.
+  // Everything that reads --lg-tint-rgb / --lg-glass-live / --lg-card-live in
+  // glass.css (the cards are YouTube's light-theme content cards, lg-cards).
   const GLASS_SCOPE = () => [
     ...(LG.site?.glassScope || []),
+    ...(LG.site ? [] : YT_CARDS),
     '.lg-glass',
     '.lg-clear',
     'ytd-menu-popup-renderer',
@@ -1003,6 +1067,20 @@
     '.expand-collapse-button button',
     '.ytdMiniplayerComponentContent',
   ].join(',');
+
+  const YT_CARDS = [
+    'ytd-watch-metadata',
+    'ytd-comments#comments',
+    'ytd-playlist-panel-renderer#playlist',
+    'yt-related-chip-cloud-renderer',
+    '#related yt-lockup-view-model',
+    '#related ytd-compact-video-renderer',
+    '#related ytd-compact-radio-renderer',
+    '#related ytd-compact-playlist-renderer',
+    'ytd-engagement-panel-section-list-renderer',
+    'ytd-live-chat-frame',
+    'ytd-ad-slot-renderer', // sponsored items in the related list
+  ];
 
   let liveStyle = null;
   function liveRule() {

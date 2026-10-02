@@ -9,7 +9,7 @@ LG.DEFAULTS = {
   refraction: true, // SVG lensing on navigation glass (Chromium only)
   reduceTransparency: false,
   performance: false, // 15 fps sampling, no refraction
-  contrastTarget: 4.5, // WCAG AA for body text
+  contrastTarget: 4.5, // WCAG AA for body text; the popup offers 1.5–4.5
   backdrop: 'hybrid', // 'enlarged' · 'hybrid' · 'radial' (see ambient.js)
 };
 
@@ -18,10 +18,18 @@ LG._settingListeners = [];
 
 LG.onSettings = (fn) => LG._settingListeners.push(fn);
 
+// Values stored by older versions can sit outside today's popup ranges (the
+// contrast target once went up to 7).
+function clampSettings() {
+  const s = LG.settings;
+  s.contrastTarget = Math.min(4.5, Math.max(1.5, Number(s.contrastTarget) || LG.DEFAULTS.contrastTarget));
+}
+
 LG.loadSettings = async () => {
   try {
     const stored = await chrome.storage.sync.get(LG.DEFAULTS);
     Object.assign(LG.settings, stored);
+    clampSettings();
   } catch {
     // Extension context invalidated (reloaded) — keep defaults.
   }
@@ -29,6 +37,7 @@ LG.loadSettings = async () => {
     if (area !== 'sync') return;
     // A removed key (storage cleared, or synced away) falls back to its default.
     for (const [key, { newValue }] of Object.entries(changes)) LG.settings[key] = newValue ?? LG.DEFAULTS[key];
+    clampSettings();
     LG._settingListeners.forEach((fn) => fn(LG.settings));
   });
   return LG.settings;
