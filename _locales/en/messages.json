@@ -30,6 +30,18 @@
   "optPerformance": {
     "message": "Performance mode"
   },
+  "optBackdrop": {
+    "message": "Backdrop"
+  },
+  "optBackdropEnlarged": {
+    "message": "Enlarged"
+  },
+  "optBackdropHybrid": {
+    "message": "Hybrid"
+  },
+  "optBackdropRadial": {
+    "message": "Radial"
+  },
   "optReset": {
     "message": "Reset to defaults"
   },

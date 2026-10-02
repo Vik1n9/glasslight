@@ -45,6 +45,7 @@
   let smctx;
   let scrimImg;
   let stillShown = false; // display holds a thumbnail, not video
+  let drawnSrc = ''; // source of the last video frame drawn
   // The stats tick reads the display canvas back from the GPU, which waits for
   // the GPU to drain (tens of ms with many glass surfaces on the page). When
   // nothing is playing the canvas holds still, so it is only re-read after it
@@ -149,7 +150,13 @@
 
   // ---- radial extension ------------------------------------------------------
 
-  // Two layers in one pass, both anchored to the picture on screen:
+  // Three backdrops, picked in the popup (LG.settings.backdrop):
+  //  - 'enlarged': the frame enlarged over the whole canvas (drawEnlarged);
+  //  - 'radial': the picture continued past the player's edges, each ray
+  //    smeared inwards from where it leaves the frame;
+  //  - 'hybrid' (default), described below.
+  //
+  // Hybrid draws two layers in one pass, both anchored to the picture on screen:
   //  - behind the player, the frame enlarged K:1 around the picture's centre
   //    (the original full-bleed wash, now centred on the player);
   //  - past the enlarged frame's edge, radial light: every pixel takes the
@@ -183,12 +190,31 @@
       uniform sampler2D tex;
       uniform vec4 rect; // picture in canvas uv: centre.xy, half size.zw
       uniform vec2 zone; // x = enlargement K, y = t at the canvas edge
+      uniform bool hybrid; // false: plain radial extension
       varying vec2 uv;
       const int TAPS = ${TAPS_JS};
       const float BAND = 0.06; // how far inside the edge the light is taken from
       void main() {
         vec2 d = (uv - rect.xy) / rect.zw; // ±1 on the picture's edges
         float t = max(abs(d.x), abs(d.y));
+        if (!hybrid) {
+          if (t <= 1.0) {
+            gl_FragColor = vec4(texture2DLodEXT(tex, d * 0.5 + 0.5, 0.0).rgb, 1.0);
+            return;
+          }
+          // Each ray averaged over a stretch inwards from where it leaves the
+          // picture, growing steeply with distance: the canvas only reaches
+          // t ~1.5-2 past a typical player, and must be a soft wash by then.
+          vec2 r = d / t;
+          float len = clamp(0.03 + 0.7 * (t - 1.0), 0.03, 0.92);
+          vec3 sum = vec3(0.0);
+          for (int i = 0; i < TAPS; i++) {
+            float f = 1.0 - len * float(i) / float(TAPS - 1);
+            sum += texture2DLodEXT(tex, r * f * 0.5 + 0.5, 0.0).rgb;
+          }
+          gl_FragColor = vec4(sum / float(TAPS), 1.0);
+          return;
+        }
         // Under the player the enlarged frame would show the frame's lower
         // band — where burned-in subtitles sit — right over the title. There
         // the edge light starts at the player itself; eased in across the
@@ -227,6 +253,7 @@
     let gl;
     let rectLoc;
     let zoneLoc;
+    let hybridLoc;
     let src;
     let sctx2;
     let failed = false;
@@ -264,6 +291,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       rectLoc = gl.getUniformLocation(prog, 'rect');
       zoneLoc = gl.getUniformLocation(prog, 'zone');
+      hybridLoc = gl.getUniformLocation(prog, 'hybrid');
       src = new OffscreenCanvas(SRC, SRC);
       sctx2 = src.getContext('2d');
       sctx2.imageSmoothingQuality = 'medium';
@@ -274,10 +302,11 @@
      * Render the cropped frame (sx, sy, sw, sh of the video) radiating from
      * `rect` (canvas uv: cx, cy, half w, half h). `zone` is [K, tMax]: the
      * enlargement of the frame behind the player, and how far the canvas
-     * extends past the picture. False when WebGL is unavailable or lost;
+     * extends past the picture; `hybrid` false draws the plain radial
+     * extension instead. False when WebGL is unavailable or lost;
      * tainted media throws, like any other draw path.
      */
-    function render(el, sx, sy, sw, sh, rect, zone) {
+    function render(el, sx, sy, sw, sh, rect, zone, hybrid) {
       if (failed) return false;
       if (!gl && !init()) {
         failed = true;
@@ -297,6 +326,7 @@
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.uniform4f(rectLoc, rect[0], rect[1], rect[2], rect[3]);
       gl.uniform2f(zoneLoc, zone[0], zone[1]);
+      gl.uniform1i(hybridLoc, hybrid ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       return true;
     }
@@ -403,9 +433,10 @@
     const sw = crop.w * vw;
     const sh = crop.h * vh;
     const filter = clarity ? `blur(${(2 - 1.4 * clarity).toFixed(2)}px) saturate(1.35)` : 'blur(2px) saturate(1.35)';
-    const rect = radialRect();
+    const mode = LG.settings.backdrop;
+    const rect = mode !== 'enlarged' && radialRect();
     const zone = rect && radialZone(rect);
-    if (rect && radial.render(video, sx, sy, sw, sh, rect, zone)) {
+    if (rect && radial.render(video, sx, sy, sw, sh, rect, zone, mode !== 'radial')) {
       dctx.globalAlpha = alpha;
       dctx.filter = filter;
       dctx.drawImage(radial.canvas, 0, 0, W, H);
@@ -418,6 +449,7 @@
     dctx.filter = 'none';
     dctx.globalAlpha = 1;
     stillShown = false;
+    drawnSrc = video.currentSrc;
     // At the midpoint the smoothed display is the frame itself; the radial
     // backdrop is not (enlarged, then the edge light), so the halo draws its own.
     if (!clarity && !radialShown) {
@@ -432,8 +464,8 @@
     gctx.globalAlpha = 1;
   }
 
-  // Fallback (no WebGL, or no picture on screen to anchor to): the frame
-  // enlarged over the whole canvas.
+  // The 'enlarged' backdrop, and the fallback of the other two (no WebGL, or
+  // no picture on screen to anchor to): the frame enlarged over the canvas.
   function drawEnlarged(sx, sy, sw, sh, alpha, filter) {
     // Immersive, keep the footage's proportions: crop to cover the canvas
     // rather than stretch (a Short stretched to 16:9 turns every fish into a
@@ -708,7 +740,9 @@
 
   /** Crossfade the ambient light to an RGBA pixel buffer (w×h). */
   function showPixels(pixels, w, h) {
-    if (videoLive() && !video.paused) return; // the video wins
+    // The video wins, also paused once its frame is on the canvas: a settings
+    // change re-routes, and must not swap a paused frame for the thumbnail.
+    if (videoLive() && (!video.paused || (!stillShown && drawnSrc === video.currentSrc))) return;
     still.width = w;
     still.height = h;
     stillCtx.putImageData(new ImageData(new Uint8ClampedArray(pixels), w, h), 0, 0);
@@ -990,10 +1024,17 @@
       ? 0.25 * (LG.settings.intensity / 100)
       : 0.95 * (LG.settings.intensity / 100);
 
+  let backdrop = null;
+
   function start(opts = {}) {
     onBlocked = opts.onBlocked || onBlocked;
     mount();
     applyClarity();
+    // Switching the backdrop redraws at once, also under a paused frame.
+    if (backdrop !== LG.settings.backdrop) {
+      if (backdrop !== null && videoLive() && !stillShown) drawOnce();
+      backdrop = LG.settings.backdrop;
+    }
     clearInterval(statsTimer);
     statsTimer = setInterval(tick, STATS_MS);
     sampleDirty = true;

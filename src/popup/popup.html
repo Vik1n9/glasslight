@@ -35,6 +35,17 @@
       </section>
 
       <section>
+        <div class="row">
+          <span data-i18n="optBackdrop" id="backdrop-label"></span>
+          <div class="segmented" role="radiogroup" aria-labelledby="backdrop-label">
+            <label><input type="radio" name="backdrop" value="enlarged" data-key="backdrop" /><span data-i18n="optBackdropEnlarged"></span></label>
+            <label><input type="radio" name="backdrop" value="hybrid" data-key="backdrop" /><span data-i18n="optBackdropHybrid"></span></label>
+            <label><input type="radio" name="backdrop" value="radial" data-key="backdrop" /><span data-i18n="optBackdropRadial"></span></label>
+          </div>
+        </div>
+      </section>
+
+      <section>
         <label class="toggle"><span data-i18n="optRefraction"></span><input type="checkbox" data-key="refraction" /></label>
         <label class="toggle"><span data-i18n="optReduceTransparency"></span><input type="checkbox" data-key="reduceTransparency" /></label>
         <label class="toggle"><span data-i18n="optPerformance"></span><input type="checkbox" data-key="performance" /></label>

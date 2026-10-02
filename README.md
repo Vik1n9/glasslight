@@ -64,7 +64,7 @@ Site content shown in the screenshots belongs to its respective owners.
 
 | Layer (WWDC25 guidance) | YouTube | 動畫瘋 | Treatment |
 |---|---|---|---|
-| Background | whole page | whole page | `#lg-ambient`: the playing picture enlarged behind the player, with radial light from the frame's edges past it (WebGL; without it, the frame enlarged over the viewport), or the hovered / centred thumbnail or cover blurred over it, plus a glow behind the player |
+| Background | whole page | whole page | `#lg-ambient`: the playing picture as one of three Backdrop modes (popup) — Hybrid (default): enlarged behind the player, with radial light from the frame's edges past it; Enlarged: the frame enlarged over the viewport; Radial: the picture's edges streamed outward from the player (Hybrid and Radial need WebGL, else Enlarged) — or the hovered / centred thumbnail or cover blurred over it, plus a glow behind the player |
 | Content | videos, description, comments, panels | info panel, comments, danmu column, anime / episode / news / history cards, schedule | YouTube: no glass — fills and transparency. 動畫瘋: one card glass for every card (a dense panel up to the Transparency midpoint, Clear glass past it) |
 | Navigation | masthead, chip bar, menus, drawer | top bar, main menu, user menu, search suggestions, sort and APP menus | Regular glass: frost + refraction + specular rim + adaptive shadow |
 | Over media | player controls, Shorts actions | player control bar | Clear glass, 35% dimming layer over bright footage |
@@ -74,9 +74,11 @@ designed look: Regular glass over a colour wash of the video. Towards 0 the
 glass thickens (denser tint, heavier frost). Towards 100 it becomes the
 Clear variant and the backdrop
 turns from a wash into the footage itself (sharper, larger canvas, less
-blur): the picture's edges stream outward from the player to the edges of
-the page, so the light is continuous with the video while the glass lenses
-it. Neither end stops being glass: the tint stays
+blur), laid out by the Backdrop mode: in Hybrid the picture enlarged behind
+the player, then light streaming from its edges to the edges of the page,
+so the light is continuous with the video while the glass lenses it. Burned-in
+subtitles stay inside the player: the light is taken only from the frame's
+outer band, and right under the player it starts at the player's edge. Neither end stops being glass: the tint stays
 between 0.12 and 0.88, light keeps spilling in, and the rim brightens as the
 tint thins. Frost thins with it, down to a quarter of the Blur setting at
 100 % (2–6 px, glass rather than frosted glass); menus, and glass over
