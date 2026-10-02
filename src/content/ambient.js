@@ -169,6 +169,7 @@
       precision mediump float;
       uniform sampler2D tex;
       uniform vec4 rect; // picture in canvas uv: centre.xy, half size.zw
+      uniform vec2 zone; // x = enlargement S, y = t at the canvas edge
       varying vec2 uv;
       const int TAPS = 8;
       void main() {
@@ -178,17 +179,30 @@
           gl_FragColor = vec4(texture2D(tex, d * 0.5 + 0.5).rgb, 1.0);
           return;
         }
-        vec2 e = d / t; // where this ray leaves the picture
-        // The canvas only reaches ~106% past the picture's own edges (see the
-        // -6%/112% inset in glass.css), so t tops out around 1.5-2 for a
-        // typical player — nowhere near where the old, gently-sloped curve
-        // widened the taps enough to stop reading as a sharp, flat-coloured
-        // patch. Ramp steeply instead, so it is already a soft, near-average
-        // wash well inside that reachable range instead of a hard-edged one.
-        float len = clamp(0.03 + 0.7 * (t - 1.0), 0.03, 0.92);
+        vec2 e = d / t; // unit ray: where it leaves the picture
+        // Ring: one expression for the frame radius along the ray. It eases
+        // from 1 at the picture's edge to 1/S at the ring's outer edge, i.e.
+        // the frame is progressively magnified up to S:1 while it spreads past
+        // the player — the old full-bleed wash, but anchored to the picture.
+        // smoothstep has no slope at either end, so neither join creases. S is
+        // capped by zone.y because the canvas only reaches ~106% past the
+        // picture's own edges (the -6%/112% inset in glass.css).
+        float r = mix(1.0, 1.0 / zone.x, smoothstep(1.0, zone.x, t));
+        if (t <= zone.x) {
+          gl_FragColor = vec4(texture2D(tex, e * r * 0.5 + 0.5).rgb, 1.0);
+          return;
+        }
+        // Past the ring the ray smears along its own direction, from the ring's
+        // outer radius inward, and the smear grows with distance. Measuring that
+        // distance as a fraction of what is left to the canvas edge (rather than
+        // in raw t) makes it reach the cap at the page edge in every layout —
+        // tMax ranges from 1.27 in theater to 5.3 on Shorts, so a fixed slope
+        // leaves one of them streaky.
+        float len = mix(0.03, 0.92, clamp((t - zone.x) / max(zone.y - zone.x, 0.001), 0.0, 1.0));
+        float base = 1.0 / zone.x; // the ring's outer radius: smears start there
         vec3 acc = vec3(0.0);
         for (int i = 0; i < TAPS; i++) {
-          float f = 1.0 - len * float(i) / float(TAPS - 1);
+          float f = base * (1.0 - len * float(i) / float(TAPS - 1));
           acc += texture2D(tex, e * f * 0.5 + 0.5).rgb;
         }
         gl_FragColor = vec4(acc / float(TAPS), 1.0);
@@ -197,6 +211,7 @@
     let canvas;
     let gl;
     let rectLoc;
+    let zoneLoc;
     let src;
     let sctx2;
     let failed = false;
@@ -229,6 +244,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       rectLoc = gl.getUniformLocation(prog, 'rect');
+      zoneLoc = gl.getUniformLocation(prog, 'zone');
       src = new OffscreenCanvas(1, 1);
       sctx2 = src.getContext('2d');
       sctx2.imageSmoothingQuality = 'medium';
@@ -237,10 +253,12 @@
 
     /**
      * Render the cropped frame (sx, sy, sw, sh of the video) radiating from
-     * `rect` (canvas uv: cx, cy, half w, half h). False when WebGL is
-     * unavailable or lost; tainted media throws, like any other draw path.
+     * `rect` (canvas uv: cx, cy, half w, half h). `zone` is [S, tMax]: the
+     * enlargement the ring reaches, and how far the canvas extends past the
+     * picture. False when WebGL is unavailable or lost; tainted media throws,
+     * like any other draw path.
      */
-    function render(el, sx, sy, sw, sh, rect) {
+    function render(el, sx, sy, sw, sh, rect, zone) {
       if (failed) return false;
       if (!gl && !init()) {
         failed = true;
@@ -266,6 +284,7 @@
       sctx2.drawImage(el, sx, sy, sw, sh, 0, 0, tw, th);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
       gl.uniform4f(rectLoc, rect[0], rect[1], rect[2], rect[3]);
+      gl.uniform2f(zoneLoc, zone[0], zone[1]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       return true;
     }
@@ -326,6 +345,41 @@
     ];
   }
 
+  // How far the canvas reaches past the picture, in picture-half units (t),
+  // and how much enlargement the ring may take. Both from the same rect.
+  //
+  // The ring is the old full-bleed wash: the frame magnified S:1 while it
+  // spreads past the player. S cannot be a constant — the reach varies far more
+  // than the eye does, so a fixed S either swallows the whole canvas in theater
+  // (where the player nearly fills the viewport) or leaves only a thin ring on a
+  // portrait Short. Hence S is capped by the reach, floored so the ring is
+  // always visible, and MIN_RADIAL keeps a usable smear beyond it.
+  //
+  // On youtube.com/watch (live, extension loaded, 1440x900):
+  //
+  //   layout                tMax   S      ring    radial t
+  //   default (931px player) 2.38  1.50   ~215px   0.88
+  //   theater (1300px)       1.46  1.21    ~64px   0.25
+  //
+  // Portrait Shorts (synthetic layout, not yet checked on a live Short):
+  //
+  //   360x640 player         5.08  1.50   ~101px   3.58
+  const S_MAX = 1.5; // ~+50%, the ring's full magnification
+  const S_MIN = 1.1; // thinnest ring that still reads as an enlarged picture
+  const MIN_RADIAL = 0.25; // t kept for the smear past the ring
+
+  function radialZone(rect) {
+    // The shader's t is a Chebyshev norm, so the canvas corners bound it.
+    let tMax = 0;
+    for (const u of [0, 1]) {
+      for (const v of [0, 1]) {
+        const t = Math.max(Math.abs((u - rect[0]) / rect[2]), Math.abs((v - rect[1]) / rect[3]));
+        if (t > tMax) tMax = t;
+      }
+    }
+    return [Math.max(S_MIN, Math.min(S_MAX, tMax - MIN_RADIAL)), tMax];
+  }
+
   // The drift would slide the backdrop out of line with the player.
   function setRadialShown(on) {
     if (on === radialShown) return;
@@ -348,7 +402,8 @@
     const sh = crop.h * vh;
     const filter = clarity ? `blur(${(2 - 1.4 * clarity).toFixed(2)}px) saturate(1.35)` : 'blur(2px) saturate(1.35)';
     const rect = radialRect();
-    if (rect && radial.render(video, sx, sy, sw, sh, rect)) {
+    const zone = rect && radialZone(rect);
+    if (rect && radial.render(video, sx, sy, sw, sh, rect, zone)) {
       dctx.globalAlpha = alpha;
       dctx.filter = filter;
       dctx.drawImage(radial.canvas, 0, 0, W, H);
