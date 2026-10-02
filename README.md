@@ -112,7 +112,7 @@ Chrome offers no way to change those at runtime.
 ## Install
 
 Download
-[glasslight-1.1.2.zip](https://github.com/Vik1n9/glasslight/releases/latest/download/glasslight-1.1.2.zip)
+[glasslight-1.2.0.zip](https://github.com/Vik1n9/glasslight/releases/latest/download/glasslight-1.2.0.zip)
 from [Releases](https://github.com/Vik1n9/glasslight/releases). Unzip it so the
 folder contains `manifest.json`, then `chrome://extensions` → Developer mode →
 **Load unpacked** → that folder. Chromium 116 or newer; Edge and Brave use the
@@ -163,6 +163,10 @@ src/popup/                settings UI
   changes, the backdrop's slow drift holds still until playback resumes, and
   動畫瘋's endlessly looping attention cues stop after three rounds — an idle
   page costs about what it does without the extension.
+- The Hybrid and Radial backdrops are one WebGL pass (`EXT_shader_texture_lod`,
+  for explicit mip levels) over a 256×256 copy of the frame; without it the
+  backdrop falls back to Enlarged. Both hold the backdrop's drift still, so it
+  stays in line with the player.
 - Refraction is Chromium-only; with it off (or in performance mode) glass
   falls back to `blur() saturate()`.
 - Honours `prefers-reduced-transparency`, `prefers-contrast: more`,
