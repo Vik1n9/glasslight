@@ -96,8 +96,9 @@ headroom (10 % for sharp immersive footage); the map is dilated by a cell and st
 Dark water stays vivid, only bright shoals are dimmed. On a light page dark
 text needs a bright backdrop, which over most footage meant a ~70 % white
 scrim everywhere; so YouTube's light watch page puts its text on frosted
-cards instead, each tinted at least what the worst cell would need, and
-leaves the backdrop between them unscrimmed. The masthead's glass
+cards instead, tinted from what the worst cell would need (drawn at 70 % of
+it: the solve is a worst case, and tested by eye the text reads fine with
+clearer cards), and leaves the backdrop between them unscrimmed. The masthead's glass
 tint is solved the same way over what is really behind it (ambient → scrim
 map → player glow). Secondary text is raised (vibrancy) so the light can stay
 brighter at equal contrast, including YouTube's hashed design tokens, which

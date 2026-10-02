@@ -1079,6 +1079,7 @@
     '#related ytd-compact-playlist-renderer',
     'ytd-engagement-panel-section-list-renderer',
     'ytd-live-chat-frame',
+    'ytd-ad-slot-renderer', // sponsored items in the related list
   ];
 
   let liveStyle = null;

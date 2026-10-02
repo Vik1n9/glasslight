@@ -697,12 +697,15 @@ html.lg-on .yt-spec-button-shape-next--filled:active {
 /* Light watch page (main.js sets lg-cards): dark text needs a bright
    backdrop, and the scrim that gave it one washed the whole page out. Here
    the text sits on frosted cards instead: each card is tinted at least what
-   the scrim map would need under its worst cell (--lg-card-live, ambient.js),
-   so the contrast target holds on every card, and the backdrop between and
-   around them keeps the footage's colour. The card is a ::before reaching
-   past the box, so nothing in YouTube's layout moves. */
+   the scrim map would need under its worst cell (--lg-card-live, ambient.js)
+   — then drawn at 70 % of that (--lg-card-keep): the solve is a worst case
+   (darkest sampled pixel, headroom, YouTube's own fills), and tested by eye
+   the text stays easy to read with the cards 30 % clearer. The backdrop
+   between and around them keeps the footage's colour. The card is a
+   ::before reaching past the box, so nothing in YouTube's layout moves. */
 html.lg-on.lg-cards {
   --lg-card-alpha: calc(0.72 - (0.72 - var(--lg-tint-floor)) * var(--lg-immerse));
+  --lg-card-keep: 0.7;
 }
 
 html.lg-on.lg-cards :is(
@@ -715,7 +718,8 @@ html.lg-on.lg-cards :is(
   #related ytd-compact-radio-renderer,
   #related ytd-compact-playlist-renderer,
   ytd-engagement-panel-section-list-renderer,
-  ytd-live-chat-frame
+  ytd-live-chat-frame,
+  ytd-ad-slot-renderer
 ) {
   position: relative;
   isolation: isolate;
@@ -731,7 +735,8 @@ html.lg-on.lg-cards :is(
   #related ytd-compact-radio-renderer,
   #related ytd-compact-playlist-renderer,
   ytd-engagement-panel-section-list-renderer,
-  ytd-live-chat-frame
+  ytd-live-chat-frame,
+  ytd-ad-slot-renderer
 )::before {
   content: "";
   position: absolute;
@@ -743,7 +748,7 @@ html.lg-on.lg-cards :is(
   border-radius: 16px;
   /* No light spill: the contrast solve counts only this white over the
      backdrop, and a spill of the footage's colour would darken it. */
-  background: rgb(var(--lg-glass-rgb) / max(var(--lg-card-alpha), var(--lg-card-live, 0.9)));
+  background: rgb(var(--lg-glass-rgb) / calc(max(var(--lg-card-alpha), var(--lg-card-live, 0.9)) * var(--lg-card-keep)));
   -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(160%);
   backdrop-filter: blur(var(--lg-blur)) saturate(160%);
   box-shadow:
