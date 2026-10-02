@@ -7,6 +7,7 @@ const DEFAULTS = {
   reduceTransparency: false,
   performance: false,
   contrastTarget: 4.5,
+  backdrop: 'hybrid',
 };
 
 const format = {
@@ -58,6 +59,7 @@ function render(settings) {
   for (const input of inputs) {
     const key = input.dataset.key;
     if (input.type === 'checkbox') input.checked = !!settings[key];
+    else if (input.type === 'radio') input.checked = input.value === settings[key];
     else input.value = settings[key];
     const out = document.querySelector(`output[data-for="${key}"]`);
     if (out) out.textContent = format[key](settings[key]);
@@ -70,7 +72,7 @@ chrome.storage.sync.get(DEFAULTS).then(render);
 for (const input of inputs) {
   input.addEventListener('input', () => {
     const key = input.dataset.key;
-    const value = input.type === 'checkbox' ? input.checked : Number(input.value);
+    const value = input.type === 'checkbox' ? input.checked : input.type === 'radio' ? input.value : Number(input.value);
     const out = document.querySelector(`output[data-for="${key}"]`);
     if (out) out.textContent = format[key](value);
     if (key === 'enabled') document.body.classList.toggle('off', !value);

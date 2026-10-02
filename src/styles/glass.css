@@ -141,6 +141,12 @@ html:not(.lg-on) #lg-ambient {
   animation-play-state: paused;
 }
 
+/* Radial backdrop (the frame enlarged behind the player, then light from its
+   edges): drifting would slide it out of line with the player. */
+#lg-ambient.lg-radial #lg-ambient-canvas {
+  animation: none;
+}
+
 @keyframes lg-drift {
   from { transform: scale(1) translate3d(0, 0, 0); }
   to   { transform: scale(1.06) translate3d(-1.5%, 1%, 0); }

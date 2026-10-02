@@ -30,6 +30,18 @@
   "optPerformance": {
     "message": "パフォーマンスモード"
   },
+  "optBackdrop": {
+    "message": "背景モード"
+  },
+  "optBackdropEnlarged": {
+    "message": "拡大"
+  },
+  "optBackdropHybrid": {
+    "message": "ミックス"
+  },
+  "optBackdropRadial": {
+    "message": "放射"
+  },
   "optReset": {
     "message": "デフォルトに戻す"
   },

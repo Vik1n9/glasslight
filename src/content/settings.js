@@ -10,6 +10,7 @@ LG.DEFAULTS = {
   reduceTransparency: false,
   performance: false, // 15 fps sampling, no refraction
   contrastTarget: 4.5, // WCAG AA for body text
+  backdrop: 'hybrid', // 'enlarged' · 'hybrid' · 'radial' (see ambient.js)
 };
 
 LG.settings = { ...LG.DEFAULTS };

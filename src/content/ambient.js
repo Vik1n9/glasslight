@@ -45,12 +45,14 @@
   let smctx;
   let scrimImg;
   let stillShown = false; // display holds a thumbnail, not video
+  let drawnSrc = ''; // source of the last video frame drawn
   // The stats tick reads the display canvas back from the GPU, which waits for
   // the GPU to drain (tens of ms with many glass surfaces on the page). When
   // nothing is playing the canvas holds still, so it is only re-read after it
   // changes; everything below sets this when the canvas or the inputs change.
   let sampleDirty = true;
   let lastPx = null;
+  let lastGlowPx = null; // the glow's top rows, when it isn't the display's (radial)
 
   // Glow margin around the player, px. Portrait players (Shorts) have empty
   // space beside them, so their halo spreads wider.
@@ -106,6 +108,7 @@
     glowClip.append(glow);
     root.append(display, scrimMap, glowClip);
     root.classList.add('lg-still');
+    radialShown = false;
     (document.body || document.documentElement).prepend(root);
 
     sample = new OffscreenCanvas(SAMPLE_W, SAMPLE_H);
@@ -145,9 +148,283 @@
     root.style.setProperty('--lg-ambient-blur', `${(18 - 17 * k).toFixed(1)}px`);
   }
 
+  // ---- radial extension ------------------------------------------------------
+
+  // Three backdrops, picked in the popup (LG.settings.backdrop):
+  //  - 'enlarged': the frame enlarged over the whole canvas (drawEnlarged);
+  //  - 'radial': the picture continued past the player's edges, each ray
+  //    smeared inwards from where it leaves the frame;
+  //  - 'hybrid' (default), described below.
+  //
+  // Hybrid draws two layers in one pass, both anchored to the picture on screen:
+  //  - behind the player, the frame enlarged K:1 around the picture's centre
+  //    (the original full-bleed wash, now centred on the player);
+  //  - past the enlarged frame's edge, radial light: every pixel takes the
+  //    colour of the frame's outermost band where its ray leaves the picture,
+  //    spread along that edge more and more with distance.
+  // Burned-in subtitles (動畫瘋, many YouTube uploads) sit ~10-25 % above the
+  // frame's bottom edge. The radial light never reaches further into the frame
+  // than its outer band, and under the player — where the enlarged frame would
+  // put the subtitle line right over the title — the light starts at the
+  // player's edge instead, so the subtitles never show outside the player.
+  // A per-pixel mapping needs a shader; without WebGL the backdrop falls back
+  // to the enlarged frame.
+  const radial = (() => {
+    // The frame is downscaled to SRC×SRC first (prefilter). Square and a power
+    // of two so WebGL 1 can mipmap it: the radial taps spread wider than the
+    // texels they skip, and point-sampling them full size leaves comb-like
+    // streaks. Stretching to a square is harmless; the shader samples in
+    // frame-relative coordinates.
+    const SRC = 256;
+    const TAPS_JS = 9;
+    const VERT = `
+      attribute vec2 p;
+      varying vec2 uv;
+      void main() {
+        uv = vec2(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5); // y down, like the page
+        gl_Position = vec4(p, 0.0, 1.0);
+      }`;
+    const FRAG = `
+      #extension GL_EXT_shader_texture_lod : require
+      precision mediump float;
+      uniform sampler2D tex;
+      uniform vec4 rect; // picture in canvas uv: centre.xy, half size.zw
+      uniform vec2 zone; // x = enlargement K, y = t at the canvas edge
+      uniform bool hybrid; // false: plain radial extension
+      varying vec2 uv;
+      const int TAPS = ${TAPS_JS};
+      const float BAND = 0.06; // how far inside the edge the light is taken from
+      void main() {
+        vec2 d = (uv - rect.xy) / rect.zw; // ±1 on the picture's edges
+        float t = max(abs(d.x), abs(d.y));
+        if (!hybrid) {
+          if (t <= 1.0) {
+            gl_FragColor = vec4(texture2DLodEXT(tex, d * 0.5 + 0.5, 0.0).rgb, 1.0);
+            return;
+          }
+          // Each ray averaged over a stretch inwards from where it leaves the
+          // picture, growing steeply with distance: the canvas only reaches
+          // t ~1.5-2 past a typical player, and must be a soft wash by then.
+          vec2 r = d / t;
+          float len = clamp(0.03 + 0.7 * (t - 1.0), 0.03, 0.92);
+          vec3 sum = vec3(0.0);
+          for (int i = 0; i < TAPS; i++) {
+            float f = 1.0 - len * float(i) / float(TAPS - 1);
+            sum += texture2DLodEXT(tex, r * f * 0.5 + 0.5, 0.0).rgb;
+          }
+          gl_FragColor = vec4(sum / float(TAPS), 1.0);
+          return;
+        }
+        // Under the player the enlarged frame would show the frame's lower
+        // band — where burned-in subtitles sit — right over the title. There
+        // the edge light starts at the player itself; eased in across the
+        // player's bottom corners.
+        float under = smoothstep(0.9, 1.05, d.y) * (1.0 - smoothstep(0.8, 1.2, abs(d.x)));
+        if (t <= zone.x && under <= 0.0) {
+          gl_FragColor = vec4(texture2DLodEXT(tex, d / zone.x * 0.5 + 0.5, 0.0).rgb, 1.0);
+          return;
+        }
+        vec2 e = d / t; // unit ray (Chebyshev): where it leaves the picture
+        // Along the edge the ray leaves through: horizontal on the top and
+        // bottom edges, vertical on the sides, eased across the corners.
+        float side = smoothstep(-0.12, 0.12, abs(e.x) - abs(e.y));
+        vec2 along = normalize(mix(vec2(1.0, 0.0), vec2(0.0, 1.0), side));
+        // Spread measured as a fraction of what is left to the canvas edge, so
+        // it reaches the cap at the page edge in every layout (tMax ranges from
+        // ~1.3 in theater to ~5 on Shorts). The light starts at the enlarged
+        // frame's edge, or at the picture's own edge under the player.
+        float t0 = mix(zone.x, 1.0, under);
+        float u = clamp((t - t0) / max(zone.y - t0, 0.001), 0.0, 1.0);
+        float spread = mix(0.03, 0.7, u);
+        vec2 q = e * (1.0 - BAND * min(1.0, u * 8.0)); // starts at the very edge: no seam
+        vec3 acc = vec3(0.0);
+        // Read the mip level whose texels are as wide as the gap between taps.
+        float lod = log2(max(1.0, spread * ${(SRC / (TAPS_JS - 1)).toFixed(1)}));
+        for (int i = 0; i < TAPS; i++) {
+          float s = spread * (float(i) / float(TAPS - 1) * 2.0 - 1.0);
+          acc += texture2DLodEXT(tex, (q + along * s) * 0.5 + 0.5, lod).rgb; // clamped
+        }
+        vec3 light = acc / float(TAPS);
+        if (t <= zone.x) light = mix(texture2DLodEXT(tex, d / zone.x * 0.5 + 0.5, 0.0).rgb, light, under);
+        gl_FragColor = vec4(light, 1.0);
+      }`;
+
+    let canvas;
+    let gl;
+    let rectLoc;
+    let zoneLoc;
+    let hybridLoc;
+    let src;
+    let sctx2;
+    let failed = false;
+
+    function init() {
+      canvas = new OffscreenCanvas(W, H);
+      gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false, preserveDrawingBuffer: true });
+      // Mip levels are chosen explicitly: implicit selection reads how fast the
+      // coordinates change between neighbouring pixels, and they jump where
+      // the enlarged frame meets the radial light, which drew a 1 px line of
+      // the frame's average colour round the enlarged frame.
+      if (!gl || !gl.getExtension('EXT_shader_texture_lod')) return false;
+      const shader = (type, text) => {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, text);
+        gl.compileShader(s);
+        return s;
+      };
+      const prog = gl.createProgram();
+      gl.attachShader(prog, shader(gl.VERTEX_SHADER, VERT));
+      gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FRAG));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return false;
+      gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW); // one triangle
+      const p = gl.getAttribLocation(prog, 'p');
+      gl.enableVertexAttribArray(p);
+      gl.vertexAttribPointer(p, 2, gl.FLOAT, false, 0, 0);
+      gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+      // Clamp at the edges: the radial taps run off them.
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      rectLoc = gl.getUniformLocation(prog, 'rect');
+      zoneLoc = gl.getUniformLocation(prog, 'zone');
+      hybridLoc = gl.getUniformLocation(prog, 'hybrid');
+      src = new OffscreenCanvas(SRC, SRC);
+      sctx2 = src.getContext('2d');
+      sctx2.imageSmoothingQuality = 'medium';
+      return true;
+    }
+
+    /**
+     * Render the cropped frame (sx, sy, sw, sh of the video) radiating from
+     * `rect` (canvas uv: cx, cy, half w, half h). `zone` is [K, tMax]: the
+     * enlargement of the frame behind the player, and how far the canvas
+     * extends past the picture; `hybrid` false draws the plain radial
+     * extension instead. False when WebGL is unavailable or lost;
+     * tainted media throws, like any other draw path.
+     */
+    function render(el, sx, sy, sw, sh, rect, zone, hybrid) {
+      if (failed) return false;
+      if (!gl && !init()) {
+        failed = true;
+        return false;
+      }
+      if (gl.isContextLost()) {
+        failed = true;
+        return false;
+      }
+      if (canvas.width !== W || canvas.height !== H) {
+        canvas.width = W;
+        canvas.height = H;
+      }
+      gl.viewport(0, 0, W, H);
+      sctx2.drawImage(el, sx, sy, sw, sh, 0, 0, SRC, SRC);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.uniform4f(rectLoc, rect[0], rect[1], rect[2], rect[3]);
+      gl.uniform2f(zoneLoc, zone[0], zone[1]);
+      gl.uniform1i(hybridLoc, hybrid ? 1 : 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      return true;
+    }
+
+    return {
+      render,
+      get canvas() {
+        return canvas;
+      },
+    };
+  })();
+
+  // The picture inside the video element (object-fit: contain) in viewport
+  // px, and the viewport it is measured in. Measured with the other layout
+  // reads (placeGlow), never per frame.
+  let picBox = null;
+  let viewW = 1;
+  let viewH = 1;
+  let radialShown = false;
+
+  function measurePicture() {
+    if (!video?.videoWidth || !video.videoHeight) {
+      picBox = null;
+      return false;
+    }
+    const r = video.getBoundingClientRect();
+    const de = document.documentElement;
+    viewW = de.clientWidth || innerWidth;
+    viewH = de.clientHeight || innerHeight;
+    if (!r.width || !r.height) {
+      picBox = null;
+      return false;
+    }
+    const k = Math.min(r.width / video.videoWidth, r.height / video.videoHeight);
+    const w = video.videoWidth * k;
+    const h = video.videoHeight * k;
+    const next = { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h };
+    const moved =
+      !picBox || Math.abs(next.x - picBox.x) + Math.abs(next.y - picBox.y) + Math.abs(next.w - picBox.w) + Math.abs(next.h - picBox.h) > 1;
+    picBox = next;
+    return moved;
+  }
+
+  // Letterbox-cropped picture in display-canvas uv (the canvas box is inset
+  // -6 % and 112 % large, see glass.css); null when there is none to anchor to.
+  function radialRect() {
+    if (!picBox) return null;
+    const w = picBox.w * crop.w;
+    const h = picBox.h * crop.h;
+    if (w < 8 || h < 8) return null;
+    const x = picBox.x + picBox.w * crop.x;
+    const y = picBox.y + picBox.h * crop.y;
+    return [
+      ((x + w / 2) / viewW + 0.06) / 1.12,
+      ((y + h / 2) / viewH + 0.06) / 1.12,
+      w / 2 / viewW / 1.12,
+      h / 2 / viewH / 1.12,
+    ];
+  }
+
+  // How far the canvas reaches past the picture, in picture-half units (t),
+  // and how much the frame behind the player is enlarged. Both from the same
+  // rect.
+  //
+  // K cannot be a constant: the canvas only reaches ~106 % past the picture's
+  // own edges (the -6 %/112 % inset in glass.css), and that reach varies a lot
+  // with layout — tMax ~2.4 on a default watch page, ~1.5 in theater, ~5 on a
+  // portrait Short. So K is capped by the reach, floored so the enlarged frame
+  // still shows past the player, and MIN_RADIAL keeps room for the light.
+  const K_WANT = 1.5; // enlargement of the frame behind the player
+  const K_MIN = 1.1;
+  const MIN_RADIAL = 0.25; // t kept for the radial light past the frame
+
+  function radialZone(rect) {
+    // The shader's t is a Chebyshev norm, so the canvas corners bound it.
+    let tMax = 0;
+    for (const u of [0, 1]) {
+      for (const v of [0, 1]) {
+        const t = Math.max(Math.abs((u - rect[0]) / rect[2]), Math.abs((v - rect[1]) / rect[3]));
+        if (t > tMax) tMax = t;
+      }
+    }
+    return [Math.max(K_MIN, Math.min(K_WANT, tMax - MIN_RADIAL)), tMax];
+  }
+
+  // The drift would slide the backdrop out of line with the player.
+  function setRadialShown(on) {
+    if (on === radialShown) return;
+    radialShown = on;
+    root.classList.toggle('lg-radial', on);
+  }
+
   // ---- video source --------------------------------------------------------
 
-  function drawVideo() {
+  // `alpha` overrides the temporal smoothing (1: show this frame as is).
+  function drawVideo(alpha = LG.prefersReducedMotion() ? 0.08 : 0.22 + 0.33 * clarity) {
+    // Temporal smoothing above; immersive footage keeps less of the previous
+    // frame so a moving shoal does not smear.
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     if (!vw || !vh) return;
@@ -155,10 +432,41 @@
     const sy = crop.y * vh;
     const sw = crop.w * vw;
     const sh = crop.h * vh;
-    // Temporal smoothing; immersive footage keeps less of the previous frame
-    // so a moving shoal does not smear.
-    const alpha = LG.prefersReducedMotion() ? 0.08 : 0.22 + 0.33 * clarity;
     const filter = clarity ? `blur(${(2 - 1.4 * clarity).toFixed(2)}px) saturate(1.35)` : 'blur(2px) saturate(1.35)';
+    const mode = LG.settings.backdrop;
+    const rect = mode !== 'enlarged' && radialRect();
+    const zone = rect && radialZone(rect);
+    if (rect && radial.render(video, sx, sy, sw, sh, rect, zone, mode !== 'radial')) {
+      dctx.globalAlpha = alpha;
+      dctx.filter = filter;
+      dctx.drawImage(radial.canvas, 0, 0, W, H);
+      setRadialShown(true);
+    } else {
+      drawEnlarged(sx, sy, sw, sh, alpha, filter);
+      setRadialShown(false);
+    }
+    sampleDirty = true;
+    dctx.filter = 'none';
+    dctx.globalAlpha = 1;
+    stillShown = false;
+    drawnSrc = video.currentSrc;
+    // At the midpoint the smoothed display is the frame itself; the radial
+    // backdrop is not (enlarged, then the edge light), so the halo draws its own.
+    if (!clarity && !radialShown) {
+      gctx.drawImage(display, 0, 0, GW, GH);
+      return;
+    }
+    // The glow frames the player, so it keeps the whole picture.
+    gctx.globalAlpha = alpha;
+    gctx.filter = 'saturate(1.35)';
+    gctx.drawImage(video, sx, sy, sw, sh, -GW / 16, -GH / 13.5, GW + GW / 8, GH + GH / 6.75);
+    gctx.filter = 'none';
+    gctx.globalAlpha = 1;
+  }
+
+  // The 'enlarged' backdrop, and the fallback of the other two (no WebGL, or
+  // no picture on screen to anchor to): the frame enlarged over the canvas.
+  function drawEnlarged(sx, sy, sw, sh, alpha, filter) {
     // Immersive, keep the footage's proportions: crop to cover the canvas
     // rather than stretch (a Short stretched to 16:9 turns every fish into a
     // smear). Eased in with the immersion, so the midpoint wash is unchanged.
@@ -182,24 +490,26 @@
     dctx.globalAlpha = alpha;
     dctx.filter = filter;
     dctx.drawImage(video, cx, cy, cw, ch, -ox, -oy, W + ox * 2, H + oy * 2);
-    sampleDirty = true;
-    dctx.filter = 'none';
-    dctx.globalAlpha = 1;
-    stillShown = false;
-    if (!clarity) {
-      gctx.drawImage(display, 0, 0, GW, GH);
-      return;
+  }
+
+  // Re-measure the layout the light depends on: the picture the radial
+  // backdrop is anchored to, and the player the glow frames.
+  function placeGlow() {
+    const moved = measurePicture();
+    placeHalo();
+    // A paused frame doesn't redraw by itself: re-anchor it after scrolling.
+    // After the reads above, so its class toggle can't force a layout.
+    if (moved && videoLive() && video.paused && active()) {
+      try {
+        drawVideo(1);
+      } catch {
+        blockVideo();
+      }
     }
-    // The glow frames the player, so it keeps the whole picture.
-    gctx.globalAlpha = alpha;
-    gctx.filter = 'saturate(1.35)';
-    gctx.drawImage(video, sx, sy, sw, sh, -GW / 16, -GH / 13.5, GW + GW / 8, GH + GH / 6.75);
-    gctx.filter = 'none';
-    gctx.globalAlpha = 1;
   }
 
   // Keep the glow canvas scaled onto the player's on-screen rect.
-  function placeGlow() {
+  function placeHalo() {
     const player = video?.closest(playerSelector());
     if (!glow || !player) return;
     const r = player.getBoundingClientRect();
@@ -430,7 +740,9 @@
 
   /** Crossfade the ambient light to an RGBA pixel buffer (w×h). */
   function showPixels(pixels, w, h) {
-    if (videoLive() && !video.paused) return; // the video wins
+    // The video wins, also paused once its frame is on the canvas: a settings
+    // change re-routes, and must not swap a paused frame for the thumbnail.
+    if (videoLive() && (!video.paused || (!stillShown && drawnSrc === video.currentSrc))) return;
     still.width = w;
     still.height = h;
     stillCtx.putImageData(new ImageData(new Uint8ClampedArray(pixels), w, h), 0, 0);
@@ -447,6 +759,7 @@
 
   function drawStill(alpha) {
     stillShown = true;
+    setRadialShown(false);
     dctx.globalAlpha = alpha;
     // Thumbnails are busier and duller than moving footage: push colour
     // harder. The source is only 32×18, so the blur scales with the canvas
@@ -524,28 +837,46 @@
   const MAST_ROWS = [Math.floor((0.06 / 1.12) * SAMPLE_H), Math.ceil((0.14 / 1.12) * SAMPLE_H)];
   const GLOW_ROWS = Math.round(SAMPLE_H * 0.22);
   const mastPx = new Uint8ClampedArray(SAMPLE_W * 4);
+  // The glow's own top rows, read when the display is not the frame (radial).
+  let glowSample;
+  let glowSctx;
+
+  function readGlowRows() {
+    if (!glowSample) {
+      glowSample = new OffscreenCanvas(SAMPLE_W, GLOW_ROWS);
+      glowSctx = glowSample.getContext('2d', { willReadFrequently: true });
+    }
+    glowSctx.filter = 'saturate(1.6)'; // as #lg-glow
+    glowSctx.drawImage(glow, 0, 0, GW, (GH * GLOW_ROWS) / SAMPLE_H, 0, 0, SAMPLE_W, GLOW_ROWS);
+    glowSctx.filter = 'none';
+    return glowSctx.getImageData(0, 0, SAMPLE_W, GLOW_ROWS).data;
+  }
 
   // Smallest glass tint that keeps masthead text at the target over what is
   // really behind it: ambient light → scrim map → player glow. Clear glass
   // thus stays clear over dark water and tints only as much as it must.
   // (The signed-out "Sign in" link blue is weaker still; glass.css gives
   // that one capsule its own fill rather than tinting the whole bar.)
-  function mastheadFloor(px, opacity, glowOpacity, dark) {
+  // `gpx` holds the glow's top rows in the layout of `px` (by default the
+  // display, which is the frame everywhere but in the radial backdrop).
+  function mastheadFloor(px, gpx, opacity, glowOpacity, dark) {
     const { base } = dark ? LG.contrast.THEMES.dark : LG.contrast.THEMES.light;
     const L = LG.contrast.luminance;
     // Worst pixel of a column: brightest on a dark page, darkest on a light one.
-    const worse = (o1, o2) => ((L(px[o1], px[o1 + 1], px[o1 + 2]) > L(px[o2], px[o2 + 1], px[o2 + 2])) === dark ? o1 : o2);
+    const worseIn = (b) => (o1, o2) => ((L(b[o1], b[o1 + 1], b[o1 + 2]) > L(b[o2], b[o2 + 1], b[o2 + 2])) === dark ? o1 : o2);
+    const worse = worseIn(px);
+    const worseG = worseIn(gpx);
     for (let x = 0; x < SAMPLE_W; x += 1) {
       let a = MAST_ROWS[0] * SAMPLE_W * 4 + x * 4;
       for (let y = MAST_ROWS[0] + 1; y <= MAST_ROWS[1]; y += 1) a = worse(a, (y * SAMPLE_W + x) * 4);
       let g = x * 4;
-      for (let y = 1; y < GLOW_ROWS; y += 1) g = worse(g, (y * SAMPLE_W + x) * 4);
+      for (let y = 1; y < GLOW_ROWS; y += 1) g = worseG(g, (y * SAMPLE_W + x) * 4);
       const cell = Math.min(GRID_X - 1, Math.max(0, Math.floor((-0.06 + (1.12 * (x + 0.5)) / SAMPLE_W) * GRID_X)));
       const scrim = cellScrim[cell];
       for (let ch = 0; ch < 3; ch += 1) {
         let v = base[ch] + (px[a + ch] - base[ch]) * opacity;
         v += (base[ch] - v) * scrim;
-        v += (px[g + ch] - v) * glowOpacity;
+        v += (gpx[g + ch] - v) * glowOpacity;
         mastPx[x * 4 + ch] = v;
       }
     }
@@ -604,6 +935,7 @@
       sctx.drawImage(display, 0, 0, SAMPLE_W, SAMPLE_H);
       sctx.filter = 'none';
       lastPx = sctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
+      lastGlowPx = radialShown ? readGlowRows() : null;
       sampleDirty = false;
     }
     const px = lastPx;
@@ -627,7 +959,8 @@
       glowLift = 1 + 0.8 * (1 - Math.min(1, lum / 0.3));
     }
     // Headroom for the saturate() in the glass backdrop-filter.
-    const floor = mastheadFloor(px, opacity, glowOpacity, dark);
+    const gpx = lastGlowPx || px;
+    const floor = mastheadFloor(px, gpx, opacity, glowOpacity, dark);
     const glass = floor > 0 ? Math.min(0.92, floor + 0.08) : 0;
     glassAlpha = glass > glassAlpha ? glass : glassAlpha + (glass - glassAlpha) * 0.15;
     // Converged once the quantized value (1/50 steps) can no longer move.
@@ -691,10 +1024,17 @@
       ? 0.25 * (LG.settings.intensity / 100)
       : 0.95 * (LG.settings.intensity / 100);
 
+  let backdrop = null;
+
   function start(opts = {}) {
     onBlocked = opts.onBlocked || onBlocked;
     mount();
     applyClarity();
+    // Switching the backdrop redraws at once, also under a paused frame.
+    if (backdrop !== LG.settings.backdrop) {
+      if (backdrop !== null && videoLive() && !stillShown) drawOnce();
+      backdrop = LG.settings.backdrop;
+    }
     clearInterval(statsTimer);
     statsTimer = setInterval(tick, STATS_MS);
     sampleDirty = true;

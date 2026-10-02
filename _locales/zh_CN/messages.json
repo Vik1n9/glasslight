@@ -30,6 +30,18 @@
   "optPerformance": {
     "message": "性能模式"
   },
+  "optBackdrop": {
+    "message": "背景模式"
+  },
+  "optBackdropEnlarged": {
+    "message": "放大"
+  },
+  "optBackdropHybrid": {
+    "message": "混合"
+  },
+  "optBackdropRadial": {
+    "message": "放射"
+  },
   "optReset": {
     "message": "恢复默认"
   },

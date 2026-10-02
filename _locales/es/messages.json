@@ -30,6 +30,18 @@
   "optPerformance": {
     "message": "Modo rendimiento"
   },
+  "optBackdrop": {
+    "message": "Fondo"
+  },
+  "optBackdropEnlarged": {
+    "message": "Ampliado"
+  },
+  "optBackdropHybrid": {
+    "message": "Mixto"
+  },
+  "optBackdropRadial": {
+    "message": "Radial"
+  },
   "optReset": {
     "message": "Restablecer valores"
   },

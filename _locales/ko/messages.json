@@ -30,6 +30,18 @@
   "optPerformance": {
     "message": "성능 모드"
   },
+  "optBackdrop": {
+    "message": "배경 모드"
+  },
+  "optBackdropEnlarged": {
+    "message": "확대"
+  },
+  "optBackdropHybrid": {
+    "message": "혼합"
+  },
+  "optBackdropRadial": {
+    "message": "방사"
+  },
   "optReset": {
     "message": "기본값으로 재설정"
   },
