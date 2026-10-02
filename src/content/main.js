@@ -91,6 +91,13 @@
     if (isWatch()) tagPlayerControls();
   }
 
+  // Light watch page: dark text needs a bright backdrop, which washed the
+  // whole page out. Its content becomes frosted cards instead (glass.css,
+  // ambient.js); the backdrop between them keeps the footage's colour.
+  function syncCards() {
+    html.classList.toggle('lg-cards', isWatch() && !html.hasAttribute('dark'));
+  }
+
   function route() {
     if (!LG.settings.enabled) return;
     if (isWatch() || isShorts()) {
@@ -103,6 +110,7 @@
       LG.thumbs.enable();
     }
     html.classList.toggle('lg-watch', isWatch());
+    syncCards();
     html.classList.toggle('lg-player-page', isWatch() || isShorts());
     syncMastheadTheme();
     decorate();
@@ -301,6 +309,7 @@
     document.addEventListener('yt-player-updated', route);
     // Light/dark theme switches change the base colour.
     new MutationObserver(() => {
+      syncCards();
       LG.ambient.tick();
       syncMastheadTheme();
     }).observe(html, { attributes: true, attributeFilter: ['dark'] });

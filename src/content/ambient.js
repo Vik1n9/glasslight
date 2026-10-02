@@ -841,6 +841,7 @@
   const rawScrim = new Float32Array(GRID_X * GRID_Y);
   const cellScrim = new Float32Array(GRID_X * GRID_Y); // dilated + smoothed
   const shownScrim = new Float32Array(GRID_X * GRID_Y); // what the canvas shows
+  const NO_SCRIM = new Float32Array(GRID_X * GRID_Y);
   let scrimRaf = 0;
   let scrimDark = null;
 
@@ -909,7 +910,7 @@
   // that one capsule its own fill rather than tinting the whole bar.)
   // `gpx` holds the glow's top rows in the layout of `px` (by default the
   // display, which is the frame everywhere but in the radial backdrop).
-  function mastheadFloor(px, gpx, opacity, glowOpacity, dark) {
+  function mastheadFloor(px, gpx, opacity, glowOpacity, dark, scrimMap) {
     const { base } = dark ? LG.contrast.THEMES.dark : LG.contrast.THEMES.light;
     const L = LG.contrast.luminance;
     // Worst pixel of a column: brightest on a dark page, darkest on a light one.
@@ -922,7 +923,7 @@
       let g = x * 4;
       for (let y = 1; y < GLOW_ROWS; y += 1) g = worseG(g, (y * SAMPLE_W + x) * 4);
       const cell = Math.min(GRID_X - 1, Math.max(0, Math.floor((-0.06 + (1.12 * (x + 0.5)) / SAMPLE_W) * GRID_X)));
-      const scrim = cellScrim[cell];
+      const scrim = scrimMap[cell];
       for (let ch = 0; ch < 3; ch += 1) {
         let v = base[ch] + (px[a + ch] - base[ch]) * opacity;
         v += (base[ch] - v) * scrim;
@@ -934,9 +935,9 @@
   }
 
   // Ease the canvas to the new map over ~¼ s (the tick interval).
-  function paintScrim(dark) {
+  function paintScrim(dark, target) {
     let changed = dark !== scrimDark;
-    for (let c = 0; c < cellScrim.length && !changed; c += 1) changed = Math.abs(cellScrim[c] - shownScrim[c]) > 0.004;
+    for (let c = 0; c < target.length && !changed; c += 1) changed = Math.abs(target[c] - shownScrim[c]) > 0.004;
     if (!changed) return;
     scrimDark = dark;
     const [r, g, b] = dark ? LG.contrast.THEMES.dark.base : LG.contrast.THEMES.light.base;
@@ -946,8 +947,8 @@
     cancelAnimationFrame(scrimRaf);
     const step = (now) => {
       const f = from[0] < 0 || LG.prefersReducedMotion() ? 1 : Math.min(1, (now - t0) / 240);
-      for (let c = 0; c < cellScrim.length; c += 1) {
-        shownScrim[c] = f === 1 ? cellScrim[c] : from[c] + (cellScrim[c] - from[c]) * f;
+      for (let c = 0; c < target.length; c += 1) {
+        shownScrim[c] = f === 1 ? target[c] : from[c] + (target[c] - from[c]) * f;
         d[c * 4] = r;
         d[c * 4 + 1] = g;
         d[c * 4 + 2] = b;
@@ -992,6 +993,13 @@
     const dark = LG.isDarkTheme();
     const opacity = ambientOpacity();
     solveScrimMap(px, opacity, dark);
+    // Content cards (main.js sets lg-cards: YouTube's light watch page): the
+    // text sits on frosted cards instead, each tinted at least the scrim the
+    // worst cell would need, and the backdrop between them stays unwashed.
+    const cards = document.documentElement.classList.contains('lg-cards');
+    let cardTint = 0;
+    if (cards) for (let c = 0; c < cellScrim.length; c += 1) cardTint = Math.max(cardTint, cellScrim[c]);
+    const scrimShown = cards ? NO_SCRIM : cellScrim;
     const { rgb, lum } = LG.contrast.dominantColor(px);
 
     // Navigation glass floats over the unscrimmed glow (masthead sits on its
@@ -1010,7 +1018,7 @@
     }
     // Headroom for the saturate() in the glass backdrop-filter.
     const gpx = lastGlowPx || px;
-    const floor = mastheadFloor(px, gpx, opacity, glowOpacity, dark);
+    const floor = mastheadFloor(px, gpx, opacity, glowOpacity, dark, scrimShown);
     const glass = floor > 0 ? Math.min(0.92, floor + 0.08) : 0;
     glassAlpha = glass > glassAlpha ? glass : glassAlpha + (glass - glassAlpha) * 0.15;
     // Converged once the quantized value (1/50 steps) can no longer move.
@@ -1022,7 +1030,7 @@
 
     // Light-layer values live on #lg-ambient: changing them restyles only
     // its three children, not the whole page. The scrim is a canvas.
-    paintScrim(dark);
+    paintScrim(dark, scrimShown);
     const a = root.style;
     setVar(a, '--lg-ambient-opacity', opacity.toFixed(2));
     setVar(a, '--lg-glow-opacity', glowOpacity.toFixed(2));
@@ -1034,11 +1042,15 @@
     const g = liveRule();
     setVar(g, '--lg-glass-live', (Math.round(glassAlpha * 50) / 50).toFixed(2));
     setVar(g, '--lg-tint-rgb', rgb.map((c) => Math.round(c / 8) * 8).join(' '));
+    // Rounded up, never below what the text needs.
+    setVar(g, '--lg-card-live', (Math.ceil(cardTint * 50) / 50).toFixed(2));
   }
 
-  // Everything that reads --lg-tint-rgb / --lg-glass-live in glass.css.
+  // Everything that reads --lg-tint-rgb / --lg-glass-live / --lg-card-live in
+  // glass.css (the cards are YouTube's light-theme content cards, lg-cards).
   const GLASS_SCOPE = () => [
     ...(LG.site?.glassScope || []),
+    ...(LG.site ? [] : YT_CARDS),
     '.lg-glass',
     '.lg-clear',
     'ytd-menu-popup-renderer',
@@ -1053,6 +1065,19 @@
     '.expand-collapse-button button',
     '.ytdMiniplayerComponentContent',
   ].join(',');
+
+  const YT_CARDS = [
+    'ytd-watch-metadata',
+    'ytd-comments#comments',
+    'ytd-playlist-panel-renderer#playlist',
+    'yt-related-chip-cloud-renderer',
+    '#related yt-lockup-view-model',
+    '#related ytd-compact-video-renderer',
+    '#related ytd-compact-radio-renderer',
+    '#related ytd-compact-playlist-renderer',
+    'ytd-engagement-panel-section-list-renderer',
+    'ytd-live-chat-frame',
+  ];
 
   let liveStyle = null;
   function liveRule() {

@@ -4,7 +4,8 @@
    ("Meet Liquid Glass"); this project is not affiliated with Apple:
      background  → #lg-ambient (video / thumbnail light) + legibility scrim
      content     → NOT glass: plain fills + transparency (videos, description,
-                   comments, panels)
+                   comments, panels); on the light watch page, frosted cards
+                   (lg-cards, section 4) so the backdrop needs no page scrim
      navigation  → glass. Regular variant for masthead, chip bar,
                    menus, drawer; Clear variant (+35% dimming over bright
                    footage) for player controls. Never glass on glass.
@@ -691,6 +692,68 @@ html.lg-on .ytChipShapeChip:active,
 html.lg-on .yt-spec-button-shape-next--tonal:active,
 html.lg-on .yt-spec-button-shape-next--filled:active {
   transform: scale(0.95);
+}
+
+/* Light watch page (main.js sets lg-cards): dark text needs a bright
+   backdrop, and the scrim that gave it one washed the whole page out. Here
+   the text sits on frosted cards instead: each card is tinted at least what
+   the scrim map would need under its worst cell (--lg-card-live, ambient.js),
+   so the contrast target holds on every card, and the backdrop between and
+   around them keeps the footage's colour. The card is a ::before reaching
+   past the box, so nothing in YouTube's layout moves. */
+html.lg-on.lg-cards {
+  --lg-card-alpha: calc(0.72 - (0.72 - var(--lg-tint-floor)) * var(--lg-immerse));
+}
+
+html.lg-on.lg-cards :is(
+  ytd-watch-metadata,
+  ytd-comments#comments,
+  ytd-playlist-panel-renderer#playlist,
+  yt-related-chip-cloud-renderer,
+  #related yt-lockup-view-model,
+  #related ytd-compact-video-renderer,
+  #related ytd-compact-radio-renderer,
+  #related ytd-compact-playlist-renderer,
+  ytd-engagement-panel-section-list-renderer,
+  ytd-live-chat-frame
+) {
+  position: relative;
+  isolation: isolate;
+}
+
+html.lg-on.lg-cards :is(
+  ytd-watch-metadata,
+  ytd-comments#comments,
+  ytd-playlist-panel-renderer#playlist,
+  yt-related-chip-cloud-renderer,
+  #related yt-lockup-view-model,
+  #related ytd-compact-video-renderer,
+  #related ytd-compact-radio-renderer,
+  #related ytd-compact-playlist-renderer,
+  ytd-engagement-panel-section-list-renderer,
+  ytd-live-chat-frame
+)::before {
+  content: "";
+  position: absolute;
+  inset: -8px -10px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 18px;
+  /* No light spill: the contrast solve counts only this white over the
+     backdrop, and a spill of the footage's colour would darken it. */
+  background: rgb(var(--lg-glass-rgb) / max(var(--lg-card-alpha), var(--lg-card-live, 0.9)));
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(160%);
+  backdrop-filter: blur(var(--lg-blur)) saturate(160%);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.5)),
+    inset 0 0 0 0.5px rgb(var(--lg-rim) / calc(var(--lg-rim-alpha) * 0.35)),
+    0 4px 16px rgb(var(--lg-shadow-rgb) / calc(var(--lg-shadow-alpha) * 0.6));
+}
+
+/* Boxed panels: the card is the panel itself (the chat frame clips). */
+html.lg-on.lg-cards :is(ytd-playlist-panel-renderer#playlist, ytd-engagement-panel-section-list-renderer, ytd-live-chat-frame)::before {
+  inset: 0;
+  border-radius: 20px;
 }
 
 /* Legibility insurance: a faint halo around text over the light (dark theme). */
