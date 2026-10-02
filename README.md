@@ -16,12 +16,12 @@ legible.
 
 <table>
 <tr>
-<td width="50%"><img src="store/screenshots/01-watch-dark.png" alt="YouTube watch page in dark theme: the video's colours light the whole page, with a glow behind the player and a glass masthead"></td>
-<td width="50%"><img src="store/screenshots/05-watch-light.png" alt="YouTube watch page in light theme with the same ambient light and glass surfaces"></td>
+<td width="50%"><img src="store/screenshots/01-watch-dark.png" alt="YouTube watch page in dark theme: the frame enlarged behind the player and light streaming from its edges colour the whole page, with a glass masthead"></td>
+<td width="50%"><img src="store/screenshots/05-watch-light.png" alt="YouTube watch page in light theme: title, description and recommendations on frosted cards, the footage's colour around them"></td>
 </tr>
 <tr>
-<td>Watch page, dark theme: the playing video lights the page; glass masthead and Clear glass player controls.</td>
-<td>Light theme: the same light, with text kept at the contrast target.</td>
+<td>Watch page, dark theme: the picture enlarged behind the player, light streaming from its edges past the side column and the description (Hybrid backdrop).</td>
+<td>Light theme: text on frosted cards, so the footage's colour stays around them instead of a white wash.</td>
 </tr>
 </table>
 
@@ -33,7 +33,7 @@ legible.
 <td width="50%"><img src="docs/screenshots/ani-clear-glass.jpg" alt="動畫瘋 watch page at Transparency 100: the info panel, danmu column and top bars are Clear glass with the footage showing through"></td>
 </tr>
 <tr>
-<td>Watch page: light from the episode, floating glass bars, the player as a rounded card, glass danmu column.</td>
+<td>Watch page: light from the episode around the player, floating glass bars, the player as a rounded card, glass danmu column.</td>
 <td>Transparency 100 (strongest light, least frost): cards and panels turn into Clear glass over the footage.</td>
 </tr>
 <tr>
@@ -64,7 +64,7 @@ Site content shown in the screenshots belongs to its respective owners.
 
 | Layer (WWDC25 guidance) | YouTube | 動畫瘋 | Treatment |
 |---|---|---|---|
-| Background | whole page | whole page | `#lg-ambient`: the playing picture as one of three Backdrop modes (popup) — Hybrid (default): enlarged behind the player, with radial light from the frame's edges past it; Enlarged: the frame enlarged over the viewport; Radial: the picture's edges streamed outward from the player (Hybrid and Radial need WebGL, else Enlarged) — or the hovered / centred thumbnail or cover blurred over it, plus a glow behind the player |
+| Background | whole page | whole page | `#lg-ambient`: the playing picture as one of three Backdrop modes (popup) — Hybrid (default): enlarged behind the player — beside a side column, out to that column and to the description below — with radial light from the frame's edges past it; Enlarged: the frame enlarged over the viewport; Radial: the picture's edges streamed outward from the player (Hybrid and Radial need WebGL, else Enlarged) — or the hovered / centred thumbnail or cover blurred over it, plus a glow behind the player |
 | Content | videos, description, comments, panels | info panel, comments, danmu column, anime / episode / news / history cards, schedule | YouTube: fills and transparency; on the light watch page, frosted cards (the backdrop between them stays unwashed). 動畫瘋: one card glass for every card (a dense panel up to the Transparency midpoint, Clear glass past it) |
 | Navigation | masthead, chip bar, menus, drawer | top bar, main menu, user menu, search suggestions, sort and APP menus | Regular glass: frost + refraction + specular rim + adaptive shadow |
 | Over media | player controls, Shorts actions | player control bar | Clear glass, 35% dimming layer over bright footage |
@@ -117,7 +117,7 @@ Chrome offers no way to change those at runtime.
 ## Install
 
 Download
-[glasslight-1.2.0.zip](https://github.com/Vik1n9/glasslight/releases/latest/download/glasslight-1.2.0.zip)
+[glasslight-1.2.1.zip](https://github.com/Vik1n9/glasslight/releases/latest/download/glasslight-1.2.1.zip)
 from [Releases](https://github.com/Vik1n9/glasslight/releases). Unzip it so the
 folder contains `manifest.json`, then `chrome://extensions` → Developer mode →
 **Load unpacked** → that folder. Chromium 116 or newer; Edge and Brave use the

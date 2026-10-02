@@ -20,8 +20,9 @@ Package: `python3 scripts/build.py` → `dist/glasslight-<version>.zip`.
 Glasslight turns the video sites you watch on — YouTube™ and 巴哈姆特動畫瘋 (ani.gamer.com.tw) — into a calm, glass-like space lit by what you are watching.
 
 • Page-wide ambient light — colours from the playing video flow across the whole page, with a soft glow radiating from behind the player. When nothing is playing, the light follows the thumbnail you hover.
+• Three backdrops — Hybrid (the picture enlarged behind the player, light streaming from its edges), Enlarged (the picture across the whole page) or Radial (the picture's edges streamed outward). Burned-in subtitles stay inside the player.
 • Frosted, refractive glass — the top bar, category bar, menus and player controls become floating glass with gentle refraction, a light-catching rim and adaptive shadows.
-• Text always stays readable — the extension measures the light behind the page several times a second and keeps text contrast at the WCAG 4.5:1 level you choose. Bright or dark footage, light or dark theme.
+• Text always stays readable — the extension measures the light behind the page several times a second and keeps text at the contrast level you choose (up to WCAG 4.5:1). Bright or dark footage, light or dark theme; on YouTube's light theme, text sits on frosted cards so the colour around them stays vivid.
 • Works across YouTube — watch pages, theater mode, Shorts, channels, search, playlists, live chat and the miniplayer.
 • Also on Bahamut Anime Crazy (ani.gamer.com.tw) — ambient light from the playing episode or the anime cover you hover, glass top bars, menus, cards and player controls.
 • Accessibility — honours Reduce Transparency, Increase Contrast and Reduce Motion, with a performance mode for older hardware.
@@ -36,7 +37,7 @@ Glasslight is an independent project and is not affiliated with, endorsed by, or
 Restyles video sites (youtube.com, ani.gamer.com.tw) with a frosted-glass interface and page-wide ambient light derived from the playing video, while keeping text legible.
 
 **Permission justifications**
-- `storage` — Saves the user's settings (on/off, light intensity, blur, transparency, contrast target, refraction, reduce transparency, performance mode, language).
+- `storage` — Saves the user's settings (on/off, light intensity, blur, transparency, contrast target, backdrop mode, refraction, reduce transparency, performance mode, language).
 - Host permission `https://i.ytimg.com/*` — Reads YouTube thumbnail pixels (via the service worker) to colour the background when no video is playing. A page cannot read these pixels itself because the images are cross-origin.
 - Content scripts on `https://www.youtube.com/*` (including the live-chat frame) and `https://ani.gamer.com.tw/*` — Apply the glass styles and sample the playing video's frames locally for the ambient light and contrast calculation. On ani.gamer.com.tw browse pages they also read the colours of anime covers from `p2.bahamut.com.tw`, which serves them to any site (CORS), so no extra host permission is needed.
 
