@@ -51,6 +51,7 @@
   // changes; everything below sets this when the canvas or the inputs change.
   let sampleDirty = true;
   let lastPx = null;
+  let lastGlowPx = null; // the glow's top rows, when it isn't the display's (radial)
 
   // Glow margin around the player, px. Portrait players (Shorts) have empty
   // space beside them, so their halo spreads wider.
@@ -354,7 +355,9 @@
     dctx.filter = 'none';
     dctx.globalAlpha = 1;
     stillShown = false;
-    if (!clarity) {
+    // At the midpoint the smoothed display is the frame itself; the radial
+    // backdrop is not, and its streaks must not end up in the halo.
+    if (!clarity && !radialShown) {
       gctx.drawImage(display, 0, 0, GW, GH);
       return;
     }
@@ -737,28 +740,46 @@
   const MAST_ROWS = [Math.floor((0.06 / 1.12) * SAMPLE_H), Math.ceil((0.14 / 1.12) * SAMPLE_H)];
   const GLOW_ROWS = Math.round(SAMPLE_H * 0.22);
   const mastPx = new Uint8ClampedArray(SAMPLE_W * 4);
+  // The glow's own top rows, read when the display is not the frame (radial).
+  let glowSample;
+  let glowSctx;
+
+  function readGlowRows() {
+    if (!glowSample) {
+      glowSample = new OffscreenCanvas(SAMPLE_W, GLOW_ROWS);
+      glowSctx = glowSample.getContext('2d', { willReadFrequently: true });
+    }
+    glowSctx.filter = 'saturate(1.6)'; // as #lg-glow
+    glowSctx.drawImage(glow, 0, 0, GW, (GH * GLOW_ROWS) / SAMPLE_H, 0, 0, SAMPLE_W, GLOW_ROWS);
+    glowSctx.filter = 'none';
+    return glowSctx.getImageData(0, 0, SAMPLE_W, GLOW_ROWS).data;
+  }
 
   // Smallest glass tint that keeps masthead text at the target over what is
   // really behind it: ambient light → scrim map → player glow. Clear glass
   // thus stays clear over dark water and tints only as much as it must.
   // (The signed-out "Sign in" link blue is weaker still; glass.css gives
   // that one capsule its own fill rather than tinting the whole bar.)
-  function mastheadFloor(px, opacity, glowOpacity, dark) {
+  // `gpx` holds the glow's top rows in the layout of `px` (by default the
+  // display, which is the frame everywhere but in the radial backdrop).
+  function mastheadFloor(px, gpx, opacity, glowOpacity, dark) {
     const { base } = dark ? LG.contrast.THEMES.dark : LG.contrast.THEMES.light;
     const L = LG.contrast.luminance;
     // Worst pixel of a column: brightest on a dark page, darkest on a light one.
-    const worse = (o1, o2) => ((L(px[o1], px[o1 + 1], px[o1 + 2]) > L(px[o2], px[o2 + 1], px[o2 + 2])) === dark ? o1 : o2);
+    const worseIn = (b) => (o1, o2) => ((L(b[o1], b[o1 + 1], b[o1 + 2]) > L(b[o2], b[o2 + 1], b[o2 + 2])) === dark ? o1 : o2);
+    const worse = worseIn(px);
+    const worseG = worseIn(gpx);
     for (let x = 0; x < SAMPLE_W; x += 1) {
       let a = MAST_ROWS[0] * SAMPLE_W * 4 + x * 4;
       for (let y = MAST_ROWS[0] + 1; y <= MAST_ROWS[1]; y += 1) a = worse(a, (y * SAMPLE_W + x) * 4);
       let g = x * 4;
-      for (let y = 1; y < GLOW_ROWS; y += 1) g = worse(g, (y * SAMPLE_W + x) * 4);
+      for (let y = 1; y < GLOW_ROWS; y += 1) g = worseG(g, (y * SAMPLE_W + x) * 4);
       const cell = Math.min(GRID_X - 1, Math.max(0, Math.floor((-0.06 + (1.12 * (x + 0.5)) / SAMPLE_W) * GRID_X)));
       const scrim = cellScrim[cell];
       for (let ch = 0; ch < 3; ch += 1) {
         let v = base[ch] + (px[a + ch] - base[ch]) * opacity;
         v += (base[ch] - v) * scrim;
-        v += (px[g + ch] - v) * glowOpacity;
+        v += (gpx[g + ch] - v) * glowOpacity;
         mastPx[x * 4 + ch] = v;
       }
     }
@@ -817,6 +838,7 @@
       sctx.drawImage(display, 0, 0, SAMPLE_W, SAMPLE_H);
       sctx.filter = 'none';
       lastPx = sctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
+      lastGlowPx = radialShown ? readGlowRows() : null;
       sampleDirty = false;
     }
     const px = lastPx;
@@ -840,7 +862,8 @@
       glowLift = 1 + 0.8 * (1 - Math.min(1, lum / 0.3));
     }
     // Headroom for the saturate() in the glass backdrop-filter.
-    const floor = mastheadFloor(px, opacity, glowOpacity, dark);
+    const gpx = lastGlowPx || px;
+    const floor = mastheadFloor(px, gpx, opacity, glowOpacity, dark);
     const glass = floor > 0 ? Math.min(0.92, floor + 0.08) : 0;
     glassAlpha = glass > glassAlpha ? glass : glassAlpha + (glass - glassAlpha) * 0.15;
     // Converged once the quantized value (1/50 steps) can no longer move.
