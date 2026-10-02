@@ -768,6 +768,15 @@ html.lg-on.lg-cards :is(
   border-radius: 14px;
 }
 
+/* The chip bar (signed-in only) is 11 px taller than its chips: the chips
+   carry an 8 px bottom margin, and the related list starts right under it.
+   Pull the card's bottom in so it sits as close to the chips as its top
+   does, clear of the first item's card. !important: the shared card rule
+   above outranks a single element (its :is() list carries #related). */
+html.lg-on.lg-cards yt-related-chip-cloud-renderer::before {
+  bottom: 8px !important;
+}
+
 /* Boxed panels: the card is the panel itself (the chat frame clips). */
 html.lg-on.lg-cards :is(ytd-playlist-panel-renderer#playlist, ytd-engagement-panel-section-list-renderer, ytd-live-chat-frame)::before {
   inset: 0;
