@@ -64,7 +64,7 @@ Site content shown in the screenshots belongs to its respective owners.
 
 | Layer (WWDC25 guidance) | YouTube | 動畫瘋 | Treatment |
 |---|---|---|---|
-| Background | whole page | whole page | `#lg-ambient`: the playing picture continued radially past the player's edges (WebGL; without it, the frame enlarged over the viewport), or the hovered / centred thumbnail or cover blurred over it, plus a glow behind the player |
+| Background | whole page | whole page | `#lg-ambient`: the playing picture enlarged behind the player, with radial light from the frame's edges past it (WebGL; without it, the frame enlarged over the viewport), or the hovered / centred thumbnail or cover blurred over it, plus a glow behind the player |
 | Content | videos, description, comments, panels | info panel, comments, danmu column, anime / episode / news / history cards, schedule | YouTube: no glass — fills and transparency. 動畫瘋: one card glass for every card (a dense panel up to the Transparency midpoint, Clear glass past it) |
 | Navigation | masthead, chip bar, menus, drawer | top bar, main menu, user menu, search suggestions, sort and APP menus | Regular glass: frost + refraction + specular rim + adaptive shadow |
 | Over media | player controls, Shorts actions | player control bar | Clear glass, 35% dimming layer over bright footage |
@@ -137,7 +137,7 @@ Chrome's 132-character limit. Store texts, privacy answers and assets live in
 src/content/settings.js   shared namespace + chrome.storage.sync settings
 src/content/contrast.js   WCAG luminance/contrast, scrim solver, dominant colour
 src/content/refract.js    SVG displacement maps (SDF of a rounded rect) as backdrop-filter
-src/content/ambient.js    video → canvas light (radial extension), glow, scrim map, letterbox/DRM detection
+src/content/ambient.js    video → canvas light (enlarged frame + radial edge light), glow, scrim map, letterbox/DRM detection
 src/content/thumbs.js     thumbnail / cover colour for browse pages (YouTube via the service
                           worker; site adapters' CORS image hosts read directly)
 src/content/main.js       YouTube: routing (yt-navigate-finish), decoration, pointer highlight

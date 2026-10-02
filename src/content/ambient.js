@@ -149,15 +149,27 @@
 
   // ---- radial extension ------------------------------------------------------
 
-  // The backdrop continues the picture past the player's edges: every pixel
-  // outside the picture takes the colour where its ray from the picture's
-  // centre leaves the frame, averaged over a short stretch inwards that grows
-  // with distance (sharp streaks at the edge, softer further out). So the
-  // light lines up with the player instead of being an unrelated, enlarged
-  // copy of the frame. A per-pixel mapping needs a shader; without WebGL the
-  // backdrop falls back to the enlarged frame.
+  // Two layers in one pass, both anchored to the picture on screen:
+  //  - behind the player, the frame enlarged K:1 around the picture's centre
+  //    (the original full-bleed wash, now centred on the player);
+  //  - past the enlarged frame's edge, radial light: every pixel takes the
+  //    colour of the frame's outermost band where its ray leaves the picture,
+  //    spread along that edge more and more with distance.
+  // Burned-in subtitles (動畫瘋, many YouTube uploads) sit ~10-25 % above the
+  // frame's bottom edge. The radial light never reaches further into the frame
+  // than its outer band, and under the player — where the enlarged frame would
+  // put the subtitle line right over the title — the light starts at the
+  // player's edge instead, so the subtitles never show outside the player.
+  // A per-pixel mapping needs a shader; without WebGL the backdrop falls back
+  // to the enlarged frame.
   const radial = (() => {
-    const SRC_MAX = 256; // the frame is downscaled to this first (prefilter)
+    // The frame is downscaled to SRC×SRC first (prefilter). Square and a power
+    // of two so WebGL 1 can mipmap it: the radial taps spread wider than the
+    // texels they skip, and point-sampling them full size leaves comb-like
+    // streaks. Stretching to a square is harmless; the shader samples in
+    // frame-relative coordinates.
+    const SRC = 256;
+    const TAPS_JS = 9;
     const VERT = `
       attribute vec2 p;
       varying vec2 uv;
@@ -166,46 +178,49 @@
         gl_Position = vec4(p, 0.0, 1.0);
       }`;
     const FRAG = `
+      #extension GL_EXT_shader_texture_lod : require
       precision mediump float;
       uniform sampler2D tex;
       uniform vec4 rect; // picture in canvas uv: centre.xy, half size.zw
-      uniform vec2 zone; // x = enlargement S, y = t at the canvas edge
+      uniform vec2 zone; // x = enlargement K, y = t at the canvas edge
       varying vec2 uv;
-      const int TAPS = 8;
+      const int TAPS = ${TAPS_JS};
+      const float BAND = 0.06; // how far inside the edge the light is taken from
       void main() {
         vec2 d = (uv - rect.xy) / rect.zw; // ±1 on the picture's edges
         float t = max(abs(d.x), abs(d.y));
-        if (t <= 1.0) {
-          gl_FragColor = vec4(texture2D(tex, d * 0.5 + 0.5).rgb, 1.0);
+        // Under the player the enlarged frame would show the frame's lower
+        // band — where burned-in subtitles sit — right over the title. There
+        // the edge light starts at the player itself; eased in across the
+        // player's bottom corners.
+        float under = smoothstep(0.9, 1.05, d.y) * (1.0 - smoothstep(0.8, 1.2, abs(d.x)));
+        if (t <= zone.x && under <= 0.0) {
+          gl_FragColor = vec4(texture2DLodEXT(tex, d / zone.x * 0.5 + 0.5, 0.0).rgb, 1.0);
           return;
         }
-        vec2 e = d / t; // unit ray: where it leaves the picture
-        // Ring: one expression for the frame radius along the ray. It eases
-        // from 1 at the picture's edge to 1/S at the ring's outer edge, i.e.
-        // the frame is progressively magnified up to S:1 while it spreads past
-        // the player — the old full-bleed wash, but anchored to the picture.
-        // smoothstep has no slope at either end, so neither join creases. S is
-        // capped by zone.y because the canvas only reaches ~106% past the
-        // picture's own edges (the -6%/112% inset in glass.css).
-        float r = mix(1.0, 1.0 / zone.x, smoothstep(1.0, zone.x, t));
-        if (t <= zone.x) {
-          gl_FragColor = vec4(texture2D(tex, e * r * 0.5 + 0.5).rgb, 1.0);
-          return;
-        }
-        // Past the ring the ray smears along its own direction, from the ring's
-        // outer radius inward, and the smear grows with distance. Measuring that
-        // distance as a fraction of what is left to the canvas edge (rather than
-        // in raw t) makes it reach the cap at the page edge in every layout —
-        // tMax ranges from 1.27 in theater to 5.3 on Shorts, so a fixed slope
-        // leaves one of them streaky.
-        float len = mix(0.03, 0.92, clamp((t - zone.x) / max(zone.y - zone.x, 0.001), 0.0, 1.0));
-        float base = 1.0 / zone.x; // the ring's outer radius: smears start there
+        vec2 e = d / t; // unit ray (Chebyshev): where it leaves the picture
+        // Along the edge the ray leaves through: horizontal on the top and
+        // bottom edges, vertical on the sides, eased across the corners.
+        float side = smoothstep(-0.12, 0.12, abs(e.x) - abs(e.y));
+        vec2 along = normalize(mix(vec2(1.0, 0.0), vec2(0.0, 1.0), side));
+        // Spread measured as a fraction of what is left to the canvas edge, so
+        // it reaches the cap at the page edge in every layout (tMax ranges from
+        // ~1.3 in theater to ~5 on Shorts). The light starts at the enlarged
+        // frame's edge, or at the picture's own edge under the player.
+        float t0 = mix(zone.x, 1.0, under);
+        float u = clamp((t - t0) / max(zone.y - t0, 0.001), 0.0, 1.0);
+        float spread = mix(0.03, 0.7, u);
+        vec2 q = e * (1.0 - BAND * min(1.0, u * 8.0)); // starts at the very edge: no seam
         vec3 acc = vec3(0.0);
+        // Read the mip level whose texels are as wide as the gap between taps.
+        float lod = log2(max(1.0, spread * ${(SRC / (TAPS_JS - 1)).toFixed(1)}));
         for (int i = 0; i < TAPS; i++) {
-          float f = base * (1.0 - len * float(i) / float(TAPS - 1));
-          acc += texture2D(tex, e * f * 0.5 + 0.5).rgb;
+          float s = spread * (float(i) / float(TAPS - 1) * 2.0 - 1.0);
+          acc += texture2DLodEXT(tex, (q + along * s) * 0.5 + 0.5, lod).rgb; // clamped
         }
-        gl_FragColor = vec4(acc / float(TAPS), 1.0);
+        vec3 light = acc / float(TAPS);
+        if (t <= zone.x) light = mix(texture2DLodEXT(tex, d / zone.x * 0.5 + 0.5, 0.0).rgb, light, under);
+        gl_FragColor = vec4(light, 1.0);
       }`;
 
     let canvas;
@@ -219,7 +234,11 @@
     function init() {
       canvas = new OffscreenCanvas(W, H);
       gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false, preserveDrawingBuffer: true });
-      if (!gl) return false;
+      // Mip levels are chosen explicitly: implicit selection reads how fast the
+      // coordinates change between neighbouring pixels, and they jump where
+      // the enlarged frame meets the radial light, which drew a 1 px line of
+      // the frame's average colour round the enlarged frame.
+      if (!gl || !gl.getExtension('EXT_shader_texture_lod')) return false;
       const shader = (type, text) => {
         const s = gl.createShader(type);
         gl.shaderSource(s, text);
@@ -238,14 +257,14 @@
       gl.enableVertexAttribArray(p);
       gl.vertexAttribPointer(p, 2, gl.FLOAT, false, 0, 0);
       gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
-      // Non-power-of-two sizes: clamp, no mipmaps (WebGL 1).
+      // Clamp at the edges: the radial taps run off them.
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       rectLoc = gl.getUniformLocation(prog, 'rect');
       zoneLoc = gl.getUniformLocation(prog, 'zone');
-      src = new OffscreenCanvas(1, 1);
+      src = new OffscreenCanvas(SRC, SRC);
       sctx2 = src.getContext('2d');
       sctx2.imageSmoothingQuality = 'medium';
       return true;
@@ -253,10 +272,10 @@
 
     /**
      * Render the cropped frame (sx, sy, sw, sh of the video) radiating from
-     * `rect` (canvas uv: cx, cy, half w, half h). `zone` is [S, tMax]: the
-     * enlargement the ring reaches, and how far the canvas extends past the
-     * picture. False when WebGL is unavailable or lost; tainted media throws,
-     * like any other draw path.
+     * `rect` (canvas uv: cx, cy, half w, half h). `zone` is [K, tMax]: the
+     * enlargement of the frame behind the player, and how far the canvas
+     * extends past the picture. False when WebGL is unavailable or lost;
+     * tainted media throws, like any other draw path.
      */
     function render(el, sx, sy, sw, sh, rect, zone) {
       if (failed) return false;
@@ -273,16 +292,9 @@
         canvas.height = H;
       }
       gl.viewport(0, 0, W, H);
-      // Downscale on the 2D canvas first, keeping the picture's proportions.
-      const k = SRC_MAX / Math.max(sw, sh);
-      const tw = Math.max(2, Math.round(sw * k));
-      const th = Math.max(2, Math.round(sh * k));
-      if (src.width !== tw || src.height !== th) {
-        src.width = tw;
-        src.height = th;
-      }
-      sctx2.drawImage(el, sx, sy, sw, sh, 0, 0, tw, th);
+      sctx2.drawImage(el, sx, sy, sw, sh, 0, 0, SRC, SRC);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+      gl.generateMipmap(gl.TEXTURE_2D);
       gl.uniform4f(rectLoc, rect[0], rect[1], rect[2], rect[3]);
       gl.uniform2f(zoneLoc, zone[0], zone[1]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -346,27 +358,17 @@
   }
 
   // How far the canvas reaches past the picture, in picture-half units (t),
-  // and how much enlargement the ring may take. Both from the same rect.
+  // and how much the frame behind the player is enlarged. Both from the same
+  // rect.
   //
-  // The ring is the old full-bleed wash: the frame magnified S:1 while it
-  // spreads past the player. S cannot be a constant — the reach varies far more
-  // than the eye does, so a fixed S either swallows the whole canvas in theater
-  // (where the player nearly fills the viewport) or leaves only a thin ring on a
-  // portrait Short. Hence S is capped by the reach, floored so the ring is
-  // always visible, and MIN_RADIAL keeps a usable smear beyond it.
-  //
-  // On youtube.com/watch (live, extension loaded, 1440x900):
-  //
-  //   layout                tMax   S      ring    radial t
-  //   default (931px player) 2.38  1.50   ~215px   0.88
-  //   theater (1300px)       1.46  1.21    ~64px   0.25
-  //
-  // Portrait Shorts (synthetic layout, not yet checked on a live Short):
-  //
-  //   360x640 player         5.08  1.50   ~101px   3.58
-  const S_MAX = 1.5; // ~+50%, the ring's full magnification
-  const S_MIN = 1.1; // thinnest ring that still reads as an enlarged picture
-  const MIN_RADIAL = 0.25; // t kept for the smear past the ring
+  // K cannot be a constant: the canvas only reaches ~106 % past the picture's
+  // own edges (the -6 %/112 % inset in glass.css), and that reach varies a lot
+  // with layout — tMax ~2.4 on a default watch page, ~1.5 in theater, ~5 on a
+  // portrait Short. So K is capped by the reach, floored so the enlarged frame
+  // still shows past the player, and MIN_RADIAL keeps room for the light.
+  const K_WANT = 1.5; // enlargement of the frame behind the player
+  const K_MIN = 1.1;
+  const MIN_RADIAL = 0.25; // t kept for the radial light past the frame
 
   function radialZone(rect) {
     // The shader's t is a Chebyshev norm, so the canvas corners bound it.
@@ -377,7 +379,7 @@
         if (t > tMax) tMax = t;
       }
     }
-    return [Math.max(S_MIN, Math.min(S_MAX, tMax - MIN_RADIAL)), tMax];
+    return [Math.max(K_MIN, Math.min(K_WANT, tMax - MIN_RADIAL)), tMax];
   }
 
   // The drift would slide the backdrop out of line with the player.
@@ -417,7 +419,7 @@
     dctx.globalAlpha = 1;
     stillShown = false;
     // At the midpoint the smoothed display is the frame itself; the radial
-    // backdrop is not, and its streaks must not end up in the halo.
+    // backdrop is not (enlarged, then the edge light), so the halo draws its own.
     if (!clarity && !radialShown) {
       gctx.drawImage(display, 0, 0, GW, GH);
       return;
