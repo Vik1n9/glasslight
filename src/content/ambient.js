@@ -379,7 +379,8 @@
     next.panel = panel < innerWidth ? panel : null;
     const desc = document.querySelector(DESCRIPTION());
     const dr = desc?.getBoundingClientRect();
-    next.desc = dr?.height && dr.top >= next.y + h - 1 ? dr.top : null;
+    const edge = LG.site?.descriptionEdge === 'bottom' ? dr?.bottom : dr?.top;
+    next.desc = dr?.height && dr.top >= next.y + h - 1 ? edge : null;
     const moved =
       !picBox ||
       Math.abs(next.x - picBox.x) + Math.abs(next.y - picBox.y) + Math.abs(next.w - picBox.w) + Math.abs(next.h - picBox.h) > 1 ||
@@ -412,8 +413,9 @@
   //
   // Beside a side panel (YouTube's playlist / recommendations column, 動畫瘋's
   // danmu column) the box is fitted to the page: right edge at the panel,
-  // bottom edge at the description under the player, top and left at the
-  // viewport's edges. Radial light takes over past the panel and below the
+  // bottom edge at the description under the player (YouTube: its top;
+  // 動畫瘋: the bottom of the title block), top and left at the viewport's
+  // edges. Radial light takes over past the panel and below the
   // description.
   //
   // Otherwise (theater, Shorts) the frame is enlarged K:1 on every side. K
