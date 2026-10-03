@@ -117,7 +117,7 @@ Chrome offers no way to change those at runtime.
 ## Install
 
 Download
-[glasslight-1.2.1.zip](https://github.com/Vik1n9/glasslight/releases/latest/download/glasslight-1.2.1.zip)
+[glasslight-1.2.2.zip](https://github.com/Vik1n9/glasslight/releases/latest/download/glasslight-1.2.2.zip)
 from [Releases](https://github.com/Vik1n9/glasslight/releases). Unzip it so the
 folder contains `manifest.json`, then `chrome://extensions` → Developer mode →
 **Load unpacked** → that folder. Chromium 116 or newer; Edge and Brave use the

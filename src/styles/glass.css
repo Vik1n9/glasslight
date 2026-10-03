@@ -717,6 +717,7 @@ html.lg-on.lg-cards :is(
   #related ytd-compact-video-renderer,
   #related ytd-compact-radio-renderer,
   #related ytd-compact-playlist-renderer,
+  #related ytd-reel-shelf-renderer,
   ytd-engagement-panel-section-list-renderer,
   ytd-live-chat-frame,
   ytd-ad-slot-renderer
@@ -734,6 +735,7 @@ html.lg-on.lg-cards :is(
   #related ytd-compact-video-renderer,
   #related ytd-compact-radio-renderer,
   #related ytd-compact-playlist-renderer,
+  #related ytd-reel-shelf-renderer,
   ytd-engagement-panel-section-list-renderer,
   ytd-live-chat-frame,
   ytd-ad-slot-renderer
@@ -762,7 +764,8 @@ html.lg-on.lg-cards :is(
   #related yt-lockup-view-model,
   #related ytd-compact-video-renderer,
   #related ytd-compact-radio-renderer,
-  #related ytd-compact-playlist-renderer
+  #related ytd-compact-playlist-renderer,
+  #related ytd-reel-shelf-renderer
 )::before {
   inset: -3px -6px;
 }

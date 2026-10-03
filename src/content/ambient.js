@@ -1079,6 +1079,7 @@
     '#related ytd-compact-video-renderer',
     '#related ytd-compact-radio-renderer',
     '#related ytd-compact-playlist-renderer',
+    '#related ytd-reel-shelf-renderer', // Shorts shelf in the related list
     'ytd-engagement-panel-section-list-renderer',
     'ytd-live-chat-frame',
     'ytd-ad-slot-renderer', // sponsored items in the related list
