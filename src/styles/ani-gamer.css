@@ -244,7 +244,8 @@ html.lg-ani .container-player .player .subtitle {
   border: solid transparent !important;
   border-width: 0 16px 0 6px !important;
   background: transparent !important;
-  border-radius: 36px 36px 36px 26px;
+  /* the glass's 20px plus the 6px (left) / 16px (right) insets */
+  border-radius: 26px 36px 36px 26px;
 }
 
 html.lg-ani .container-player .player .subtitle::before {
@@ -252,8 +253,8 @@ html.lg-ani .container-player .player .subtitle::before {
   position: absolute;
   inset: 0;
   z-index: -1;
-  /* outer 36 36 36 26 minus the 6px / 16px insets */
-  border-radius: 30px 20px 20px 20px;
+  /* the player card's 20px on every corner: one radius beside it */
+  border-radius: 20px;
   pointer-events: none;
 }
 
