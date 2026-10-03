@@ -59,6 +59,7 @@
       LG.ambient.stop();
       LG.thumbs.disable();
       restoreMastheadTheme();
+      fitPlaylist();
       return;
     }
     LG.ambient.start({ onBlocked: () => LG.thumbs.showVideo(videoId()) });
@@ -98,6 +99,34 @@
     html.classList.toggle('lg-cards', isWatch() && !html.hasAttribute('dark'));
   }
 
+  // Playlist beside the player (not theater): end it level with the player's
+  // bottom. YouTube caps it at its own panel height, 33-74 px taller than the
+  // player depending on the window width, so only the player's real rect
+  // gives the number. Layout reads only on resize / navigation / the 2 s
+  // re-decoration, never per frame.
+  const playlistFit = new ResizeObserver(() => fitPlaylist());
+  let fitPlayer = null;
+  function fitPlaylist() {
+    const pl = document.querySelector('ytd-playlist-panel-renderer#playlist');
+    if (!pl) return;
+    const flexy = pl.closest('ytd-watch-flexy');
+    const player = flexy?.querySelector('#player');
+    if (player && player !== fitPlayer) {
+      playlistFit.disconnect();
+      playlistFit.observe(player);
+      fitPlayer = player;
+    }
+    let h = '';
+    if (LG.settings.enabled && isWatch() && player && !flexy.hasAttribute('theater') && !flexy.hasAttribute('fullscreen')) {
+      const p = player.getBoundingClientRect();
+      // Only when the playlist starts level with the player (no panel above it).
+      if (p.height > 200 && Math.abs(pl.getBoundingClientRect().top - p.top) < 2) h = `${Math.round(p.height)}px`;
+    }
+    if (pl.style.getPropertyValue('max-height') === h) return;
+    if (h) pl.style.setProperty('max-height', h, 'important');
+    else pl.style.removeProperty('max-height');
+  }
+
   function route() {
     if (!LG.settings.enabled) return;
     if (isWatch() || isShorts()) {
@@ -111,6 +140,7 @@
     }
     html.classList.toggle('lg-watch', isWatch());
     syncCards();
+    fitPlaylist();
     html.classList.toggle('lg-player-page', isWatch() || isShorts());
     syncMastheadTheme();
     decorate();
@@ -317,6 +347,7 @@
     setInterval(() => {
       if (document.hidden) return;
       decorate();
+      fitPlaylist();
       if ((isWatch() || isShorts()) && mainVideo()) LG.ambient.bindVideo(mainVideo());
     }, 2000);
   }

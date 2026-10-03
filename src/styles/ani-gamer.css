@@ -17,9 +17,11 @@ html.lg-ani .mainmenu ul {
 /* Top bar + main menu: two floating capsules inset from the window edges,
    like YouTube's masthead over its chip bar. They stay position: fixed
    (.lg-glass would make them relative); .top_sky is the in-flow spacer
-   under them, grown to clear the insets. */
+   under them, grown to clear the insets and leave the same 8px gap under
+   the menu as between the two capsules, so the player and the danmu column
+   don't sit flush against it. */
 html.lg-ani .top_sky {
-  height: 112px !important;
+  height: 118px !important;
 }
 
 html.lg-ani .sky.lg-glass,
@@ -37,8 +39,10 @@ html.lg-ani .sky.lg-glass {
 }
 
 html.lg-ani .mainmenu.lg-glass {
-  --lg-radius: 22px;
-  top: 67px !important;
+  --lg-radius: 20px;
+  /* Bahamut's 45px bar, inset 2px top and bottom: 69-110 */
+  top: 69px !important;
+  height: 41px !important;
 }
 
 /* Theater mode (劇院模式): Bahamut slides the header away by its own 100px
@@ -244,7 +248,8 @@ html.lg-ani .container-player .player .subtitle {
   border: solid transparent !important;
   border-width: 0 16px 0 6px !important;
   background: transparent !important;
-  border-radius: 36px 36px 36px 26px;
+  /* the glass's 20px plus the 6px (left) / 16px (right) insets */
+  border-radius: 26px 36px 36px 26px;
 }
 
 html.lg-ani .container-player .player .subtitle::before {
@@ -252,8 +257,8 @@ html.lg-ani .container-player .player .subtitle::before {
   position: absolute;
   inset: 0;
   z-index: -1;
-  /* outer 36 36 36 26 minus the 6px / 16px insets */
-  border-radius: 30px 20px 20px 20px;
+  /* the player card's 20px on every corner: one radius beside it */
+  border-radius: 20px;
   pointer-events: none;
 }
 
@@ -300,9 +305,12 @@ html.lg-ani.lg-reduce-transparency .container-player .player .subtitle::before {
 
 /* Bahamut's cyan accents are tuned for a white page (#00b4d8 is only 2.3:1
    there); over the tinted light-theme backdrop they wash out, so deepen them
-   — the same vibrancy move glass.css makes for YouTube's secondary text. */
+   — the same vibrancy move glass.css makes for YouTube's secondary text.
+   The scrim map only guarantees text as dark as the theme's grey (#4a4a4a,
+   luminance 0.068), so the cyan goes no lighter than that: #007a93 (0.16)
+   measured 2.9:1 over dark footage at Transparency 100. */
 html.lg-ani:not([dark]) section.data :is(.score-overall-number, .link-button, .link-button *) {
-  color: #007a93 !important;
+  color: #00505f !important;
 }
 
 /* The rating button sits on a second fill (.BH-rbox), one step further from
