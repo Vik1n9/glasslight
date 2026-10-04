@@ -76,9 +76,12 @@ Clear variant and the backdrop
 turns from a wash into the footage itself (sharper, larger canvas, less
 blur), laid out by the Backdrop mode: in Hybrid the picture enlarged behind
 the player, then light streaming from its edges to the edges of the page,
-so the light is continuous with the video while the glass lenses it. Burned-in
-subtitles stay inside the player: the light is taken only from the frame's
-outer band, and right under the player it starts at the player's edge. Neither end stops being glass: the tint stays
+so the light is continuous with the video while the glass lenses it. Right
+under the player, down to the title, the picture is reflected instead:
+mirrored on its bottom edge, blurred and dimmed with depth, fading into the
+light below. Burned-in subtitles stay inside the player: the light is taken
+only from the frame's outer band, and the reflection blurs a mirrored
+subtitle line past reading. Neither end stops being glass: the tint stays
 between 0.12 and 0.88, light keeps spilling in, and the rim brightens as the
 tint thins. Frost thins with it, down to a quarter of the Blur setting at
 100 % (2–6 px, glass rather than frosted glass); menus, and glass over

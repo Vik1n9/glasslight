@@ -201,10 +201,12 @@
       varying vec2 uv;
       const int TAPS = ${TAPS_JS};
       const float BAND = 0.06; // how far inside the edge the light is taken from
-      // Reflection under the player: brightness against the player's, and
-      // length in picture half-widths, so a portrait Short gets a short one.
-      const float DIM = 0.72;
-      const float REFL = 0.6;
+      // Reflection under the player, in picture halves below its bottom edge;
+      // capped so a box reaching far down (no description found) does not
+      // mirror half the picture, and in half-widths too, so a portrait Short
+      // gets a short one.
+      const float REFL_MAX = 0.6;
+      const float REFL_DIM = 0.7; // brightness at the player's edge: under the title
       void main() {
         vec2 d = (uv - rect.xy) / rect.zw; // ±1 on the picture's edges
         if (!hybrid) {
@@ -232,31 +234,32 @@
         vec2 n = d / k;
         float t = max(abs(n.x), abs(n.y));
         if (t <= 1.0) {
-          vec3 frame = texture2DLodEXT(tex, n * 0.5 + 0.5, 0.0).rgb;
-          // Straight under the player the reflection, eased in across its
-          // corners; colours are blended, not coordinates, so nothing smears.
-          float under = smoothstep(0.98, 1.0, d.y) * (1.0 - smoothstep(0.8, 1.2, abs(d.x)));
-          if (under <= 0.0) {
-            gl_FragColor = vec4(frame, 1.0);
-            return;
+          vec3 col = texture2DLodEXT(tex, n * 0.5 + 0.5, 0.0).rgb;
+          // Straight under the player, the reflection over the frame's bottom
+          // row; colours are blended, not coordinates, so nothing smears.
+          // Handed back to the enlarged frame only in the box's outer fifth
+          // (box-relative, so in every layout), which meets the radial light
+          // at the box's side; any nearer, the enlarged frame's own subtitle
+          // line would show through the hand-over.
+          float under = smoothstep(0.98, 1.0, d.y) * (1.0 - smoothstep(0.8, 1.0, abs(n.x)));
+          if (under > 0.0) {
+            // Mirrored in picture space, not box space: the video shows frame
+            // point d, the enlarged frame d / k, so only d meets the video's
+            // bottom row at the player's edge. Blurred with depth, which
+            // carries a mirrored subtitle line past reading.
+            float depth = max(d.y - 1.0, 0.0);
+            vec3 refl = texture2DLodEXT(tex, vec2(d.x, 1.0 - depth) * 0.5 + 0.5, min(6.0, 2.5 + 12.0 * depth)).rgb;
+            // Fades into the frame's bottom row at the enlarged x: what the
+            // enlarged frame and the radial light both show at the box's
+            // bottom edge, so neither seam shows. Flat at both ends; as wide
+            // as the picture.
+            float len = min(k.y - 1.0, REFL_MAX * min(1.0, aspect));
+            float a = (1.0 - smoothstep(0.0, max(len, 0.001), depth)) * (1.0 - smoothstep(0.9, 1.1, abs(d.x)));
+            vec3 base = texture2DLodEXT(tex, vec2(n.x, 1.0) * 0.5 + 0.5, 0.0).rgb;
+            vec3 below = mix(base, refl, a) * mix(1.0, REFL_DIM, a);
+            col = mix(col, below, under);
           }
-          // Mirrored in picture space (axis d.y = 1), aligned with the player
-          // above it: the box's n would scale it by k and bend the shape.
-          float g = clamp((d.y - 1.0) / max(min(k.y - 1.0, REFL * aspect), 0.001), 0.0, 1.0);
-          float h = clamp((d.y - 1.0) / max(k.y - 1.0, 0.001), 0.0, 1.0);
-          vec2 m = clamp(vec2(d.x, 2.0 - d.y), -1.0, 1.0);
-          vec3 refl = texture2DLodEXT(tex, m * 0.5 + 0.5, mix(2.0, 4.0, g)).rgb;
-          // What the radial light starts from at the box's bottom edge: the
-          // frame's bottom row at n.x, sharp only where it meets the light.
-          vec3 tail = texture2DLodEXT(tex, vec2(n.x, 1.0) * 0.5 + 0.5, 2.5 * (1.0 - h)).rgb;
-          vec3 c = mix(tail, refl, (1.0 - g) * (1.0 - g));
-          // Dimmer than the player across the title, back to full brightness
-          // at the box's edge so the light past it has no seam.
-          c *= mix(DIM, 1.0, smoothstep(0.5, 1.0, h));
-          // Across the corners the frame keeps clear of the subtitle line: it
-          // slides to its bottom row as the reflection takes over.
-          vec3 side = texture2DLodEXT(tex, vec2(n.x, mix(n.y, 1.0, under)) * 0.5 + 0.5, 0.0).rgb;
-          gl_FragColor = vec4(mix(side, c, under), 1.0);
+          gl_FragColor = vec4(col, 1.0);
           return;
         }
         vec2 e = n / t; // unit ray (Chebyshev): where it leaves the box
