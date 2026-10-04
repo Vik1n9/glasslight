@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CHROMIUM, PRESETS, SITES, THRESHOLDS, args, buildExtension, displayAt, loadPlaywright, resolveSha, sleep } from './lib.mjs';
+import { CHROMIUM, PRESETS, SITES, THRESHOLDS, args, buildExtension, displayAt, loadPlaywright, measureSystem, resolveSha, sleep } from './lib.mjs';
 
 const { site, ref = 'WORKTREE', label = ref, round = '1', theme = 'light', presets: presetArg = 'default', out = path.join(os.tmpdir(), 'lg-perf') } = args;
 // Where the test window opens, as "x,y" in top-left screen coordinates (e.g.
@@ -29,14 +29,21 @@ for (const n of presetNames) if (!PRESETS[n]) throw new Error(`unknown preset ${
 
 const { chromium } = loadPlaywright();
 fs.mkdirSync(out, { recursive: true });
-const ext = buildExtension(ref, path.join(out, `ext-${label}`));
-const ctx = await chromium.launchPersistentContext(path.join(out, `profile-${site}-${theme}-${label}-${round}`), {
+// --ref NONE is the control: the same page and clip with no extension loaded, so
+// the extension's own cost is candidate minus control.
+const noExt = ref === 'NONE';
+const ext = noExt ? null : buildExtension(ref, path.join(out, `ext-${label}`));
+const profileDir = path.join(out, `profile-${site}-${theme}-${label}-${round}`);
+const ctx = await chromium.launchPersistentContext(profileDir, {
   executablePath: CHROMIUM,
   headless: false,
   viewport: { width: 1440, height: 900 },
   colorScheme: theme,
-  ignoreDefaultArgs: ['--enable-automation'],
-  args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--autoplay-policy=no-user-gesture-required', '--mute-audio', '--disable-blink-features=AutomationControlled', ...(windowPos ? [`--window-position=${windowPos}`] : [])],
+  // Playwright forces an sRGB colour profile, which also hides the display's HDR
+  // from the page (dynamic-range: high = false) so YouTube only sends SDR. With
+  // --expect-hdr that flag is dropped for every site, keeping the pipeline identical.
+  ignoreDefaultArgs: ['--enable-automation', ...(args['expect-hdr'] ? ['--force-color-profile=srgb'] : [])],
+  args: [...(noExt ? [] : [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`]), '--autoplay-policy=no-user-gesture-required', '--mute-audio', '--disable-blink-features=AutomationControlled', ...(windowPos ? [`--window-position=${windowPos}`] : [])],
 });
 await ctx.addInitScript(() => {
   window.__lt = { n: 0, ms: 0, errs: [] };
@@ -66,6 +73,25 @@ const check = (name, ok, detail = '') => result.checks.push({ name, ok: !!ok, de
 
 // A hidden or unfocused tab throttles rAF and timers, which would skew every number.
 const foreground = () => page.evaluate(() => document.visibilityState === 'visible' && document.hasFocus());
+
+// Two shots of a frozen frame never match byte for byte (decoder dithering, GPU
+// rounding). They are "the same" when the mean difference is invisible and next
+// to no pixel moved by more than 8 levels.
+const toolPage = await ctx.newPage(); // a scratch tab to decode PNGs with a canvas
+await toolPage.goto('about:blank');
+await page.bringToFront();
+const nearlyIdentical = async (a, b) => {
+  const d = await toolPage.evaluate(async ([x, y]) => {
+    const load = (b64) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = 'data:image/png;base64,' + b64; });
+    const px = (img) => { const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0); return g.getImageData(0, 0, c.width, c.height).data; };
+    const A = px(await load(x)), B = px(await load(y));
+    if (A.length !== B.length) return { mean: 255, pct: 100 };
+    let sum = 0, over = 0;
+    for (let i = 0; i < A.length; i += 4) { const e = (Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])) / 3; sum += e; if (e > 8) over++; }
+    return { mean: sum / (A.length / 4), pct: (100 * over) / (A.length / 4) };
+  }, [a.toString('base64'), b.toString('base64')]);
+  return d.mean <= THRESHOLDS.stillMean && d.pct <= THRESHOLDS.stillPct;
+};
 
 // Wait out pre-roll ads and the age gate; returns once the episode itself plays.
 async function waitPlayable() {
@@ -105,25 +131,32 @@ if (cfg.quality) {
   }
   await sleep(3000);
 }
-await sleep(1500);
+// YouTube's responsive layout can settle at different widths depending on load
+// timing. Nudge the viewport so it relays out against the final size, then wait.
+await page.setViewportSize({ width: 1439, height: 900 });
+await sleep(600);
+await page.setViewportSize({ width: 1440, height: 900 });
+await sleep(2000);
 result.ready = await page.evaluate((s) => {
   const v = document.querySelector(s), p = document.getElementById('movie_player');
   let stats = null;
   try { const st = p?.getStatsForNerds?.(); stats = st && { res: st.resolution, codecs: st.codecs, color: st.color }; } catch {}
-  return { env: { dpr: devicePixelRatio, screen: `${screen.width}x${screen.height}`, hdr: matchMedia('(dynamic-range: high)').matches, screenX: screenX, screenY: screenY }, dur: v?.duration, w: v?.videoWidth, h: v?.videoHeight, stats, dark: document.documentElement.hasAttribute('dark'), canvases: document.querySelectorAll('#lg-ambient canvas').length, lgClear: document.querySelectorAll('.lg-clear').length };
+  const vr = v?.getBoundingClientRect();
+  return { layout: { inner: `${innerWidth}x${innerHeight}`, video: vr ? `${Math.round(vr.left)},${Math.round(vr.top)} ${Math.round(vr.width)}x${Math.round(vr.height)}` : null }, env: { dpr: devicePixelRatio, screen: `${screen.width}x${screen.height}`, hdr: matchMedia('(dynamic-range: high)').matches, screenX: screenX, screenY: screenY }, dur: v?.duration, w: v?.videoWidth, h: v?.videoHeight, stats, dark: document.documentElement.hasAttribute('dark') || document.documentElement.getAttribute('data-theme') === 'dark', canvases: document.querySelectorAll('#lg-ambient canvas').length, lgClear: document.querySelectorAll('.lg-clear').length };
 }, VSEL);
-check('extension-active', result.ready.canvases === 3, `ambient canvases=${result.ready.canvases}`);
+if (!noExt) check('extension-active', result.ready.canvases === 3, `ambient canvases=${result.ready.canvases}`);
 check('theme-applied', result.ready.dark === (theme === 'dark'), `wanted ${theme}, html[dark]=${result.ready.dark}`);
 // --expect-hdr: the point of the run is the HDR path, so the stream must really be HDR.
-if (args['expect-hdr']) check('hdr-stream', /smpte2084|pq|arib|hlg/i.test(result.ready.stats?.color || ''), `stream color ${result.ready.stats?.color || 'unknown'}, display HDR ${result.ready.env.hdr}`);
+if (args['expect-hdr'] && site === 'yt4k') check('hdr-stream', /smpte2084|pq|arib|hlg/i.test(result.ready.stats?.color || ''), `stream color ${result.ready.stats?.color || 'unknown'}, display HDR ${result.ready.env.hdr}`);
 if (cfg.quality) check('quality-reached', result.ready.h >= Number(cfg.quality.replace('hd', '')), `${result.ready.w}x${result.ready.h} wanted ${cfg.quality}`);
 
 // Settings go through chrome.storage.sync from an extension page, which the
 // content script's onChanged listener applies live, exactly like the popup.
-const extId = new URL((ctx.serviceWorkers()[0] || (await ctx.waitForEvent('serviceworker', { timeout: 15000 }))).url()).host;
-const setterPage = await ctx.newPage();
-await setterPage.goto(`chrome-extension://${extId}/src/popup/popup.html`);
+const extId = noExt ? null : new URL((ctx.serviceWorkers()[0] || (await ctx.waitForEvent('serviceworker', { timeout: 15000 }))).url()).host;
+const setterPage = noExt ? null : await ctx.newPage();
+if (!noExt) await setterPage.goto(`chrome-extension://${extId}/src/popup/popup.html`);
 async function applyPreset(name) {
+  if (noExt) { await page.bringToFront(); await sleep(1000); return {}; }
   await setterPage.evaluate((v) => chrome.storage.sync.set(v), PRESETS[name]);
   await page.bringToFront(); // a background tab would throttle rAF and skew everything
   await sleep(2500);
@@ -140,7 +173,7 @@ for (const name of presetNames) {
   const rootVars = await applyPreset(name);
   const preset = { settings: PRESETS[name], rootVars, clips: {} };
   result.presets[name] = preset;
-  check(`${name}:preset-applied`, rootVars['--lg-transparency'] === (PRESETS[name].transparency / 100).toFixed(2), `--lg-transparency=${rootVars['--lg-transparency']}`);
+  if (!noExt) check(`${name}:preset-applied`, rootVars['--lg-transparency'] === (PRESETS[name].transparency / 100).toFixed(2), `--lg-transparency=${rootVars['--lg-transparency']}`);
   for (const clip of cfg.clips) {
     const r = { stills: [] };
     const dur = clip.to - clip.from;
@@ -149,12 +182,14 @@ for (const name of presetNames) {
     await sleep(3500);
     const m0 = await metrics(), l0 = await lt(), q0 = await quality();
     const t0 = await page.evaluate((s) => document.querySelector(s).currentTime, VSEL);
-    await sleep(dur * 1000);
+    r.sys = await measureSystem(profileDir, () => sleep(dur * 1000));
     const m1 = await metrics(), l1 = await lt(), q1 = await quality();
     const t1 = await page.evaluate((s) => document.querySelector(s).currentTime, VSEL);
     r.cpu = Object.fromEntries(KEYS.map((k) => [k, +(m1[k] - m0[k]).toFixed(4)]));
     Object.assign(r.cpu, { longTasks: l1.n - l0.n, longTaskMs: +(l1.ms - l0.ms).toFixed(0), frames: q1[0] - q0[0], dropped: q1[1] - q0[1] });
     check(`${name}/${clip.name}:playing`, t1 - t0 >= dur * 0.9, `media advanced ${(t1 - t0).toFixed(1)}s of ${dur}s`);
+
+    if (noExt) { preset.clips[clip.name] = r; continue; }
 
     // B: 10 Hz sampler of the extension's own canvases (#lg-ambient-canvas the
     // small ambient picture, #lg-scrim the legibility scrim alpha, #lg-glow the
@@ -197,20 +232,25 @@ for (const name of presetNames) {
     // scrim ease, control fades and the like have finished; otherwise it is
     // retried and finally flagged unstable instead of poisoning the diff.
     for (const [i, t] of clip.stills.entries()) {
-      await page.evaluate(([s, t]) => new Promise((res) => { const v = document.querySelector(s); v.pause(); v.addEventListener('seeked', () => res(), { once: true }); v.currentTime = t; }), [VSEL, t]);
+      await page.evaluate(([s, t]) => new Promise((res) => { const v = document.querySelector(s); v.pause(); v.addEventListener('seeked', () => res(), { once: true }); v.currentTime = t + 0.02; }), [VSEL, t]); // +0.02 s: the middle of a frame, so a seek can't land on either side of a boundary
       await page.mouse.move(1300, 880);
       await sleep(1500);
-      let buf = null, stable = false;
+      let pair = null, stable = false;
       for (let attempt = 0; attempt < 4 && !stable; attempt++) {
         const a = await page.screenshot({ clip: cfg.region });
         await sleep(700);
         const b = await page.screenshot({ clip: cfg.region });
-        buf = b;
-        stable = a.equals(b);
+        pair = [a, b];
+        stable = a.equals(b) || (await nearlyIdentical(a, b));
       }
       const file = `still-${site}-${theme}-${name}-${clip.name}-${i}-${label}-${round}.png`;
-      fs.writeFileSync(path.join(out, file), buf);
-      r.stills.push({ key: `${name}/${clip.name}/${i}@${t}s`, file, stable });
+      fs.writeFileSync(path.join(out, file), pair[1]);
+      const entry = { key: `${name}/${clip.name}/${i}@${t}s`, file, stable };
+      if (!stable) { // keep both shots: compare.mjs prints where they differ
+        entry.pair = [file.replace('.png', '-a.png'), file.replace('.png', '-b.png')];
+        pair.forEach((buf, k) => fs.writeFileSync(path.join(out, entry.pair[k]), buf));
+      }
+      r.stills.push(entry);
       check(`${name}/${clip.name}/${i}:still-stable`, stable, `frame at ${t}s ${stable ? 'settled' : 'kept changing'}`);
     }
     preset.clips[clip.name] = r;
@@ -218,7 +258,7 @@ for (const name of presetNames) {
 }
 
 // ---- YouTube only, default settings: layout churn and SPA navigation --------
-if (site.startsWith('yt') && withLayout) {
+if (site.startsWith('yt') && withLayout && !noExt) {
   await applyPreset('default');
   await seek(cfg.clips[0].from);
   await sleep(2000);

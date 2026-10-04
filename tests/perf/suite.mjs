@@ -10,6 +10,7 @@
 // Runs alternate base/cand inside every site x theme so network and time-of-day
 // drift lands on both sides. Exit code 1 means a hard failure.
 //
+//   --off               also run a no-extension control (default in full mode) so the extension's own CPU/GPU/RAM cost is separated from the page's
 //   --window x,y        open the test window on another display (or LG_PERF_WINDOW)
 //   --expect-display WxH  refuse to run unless that display has this resolution
 //   --expect-hdr        the display must be in HDR mode and the 4K stream must really be HDR
@@ -24,14 +25,15 @@ import { args, displayAt, displayLabel, pauseFile, resolveSha } from './lib.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MODES = {
-  quick: { sites: 'yt', themes: 'light', presets: 'default', rounds: 1, layout: true },
-  full: { sites: 'yt,yt4k,ani', themes: 'light,dark', presets: 'default,max-glass,solid-glow', rounds: 2, layout: true },
+  quick: { sites: 'yt', themes: 'light', presets: 'default', rounds: 1, layout: true, off: false },
+  full: { sites: 'yt,yt4k,ani', themes: 'light,dark', presets: 'default,max-glass,solid-glow', rounds: 2, layout: true, off: true },
 };
 const mode = MODES[args.mode || 'quick'];
 if (!mode) throw new Error('--mode must be quick or full');
 const sites = (args.sites || mode.sites).split(',');
 const themes = (args.themes || mode.themes).split(',');
 const presets = args.presets || mode.presets;
+const withOff = args.off !== undefined ? args.off !== '0' : mode.off; // control runs with no extension: gives the extension's own cost
 const rounds = Number(args.rounds || mode.rounds);
 const out = args.out || path.join(os.tmpdir(), 'lg-perf');
 const BASE = args.base || 'HEAD';
@@ -59,11 +61,12 @@ const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } cat
 const VALIDITY = /^(ads-cleared|extension-active|theme-applied|quality-reached|hdr-stream)$|:(playing|preset-applied|foreground|still-stable)$/;
 const invalid = (r) => !r || r.schema !== 2 || r.checks.some((c) => !c.ok && VALIDITY.test(c.name));
 
-function cached(site, theme, round) {
-  if (baseSha === 'WORKTREE' || args.aa) return false;
-  const r = read(resultPath(site, theme, 'base', round));
-  const wantLayout = mode.layout && site.startsWith('yt');
-  return r && r.sha === baseSha && (r.windowPos || '') === windowPos && sig(r.display) === sig(startDisplay) && !invalid(r) && presets.split(',').every((p) => r.presets[p]) && (!wantLayout || r['theater x8']);
+function cached(site, theme, round, label, ref, wantPresets) {
+  const sha = resolveSha(ref);
+  if (sha === 'WORKTREE' || args.aa) return false;
+  const r = read(resultPath(site, theme, label, round));
+  const wantLayout = mode.layout && site.startsWith('yt') && ref !== 'NONE';
+  return !!(r && r.sha === sha && (r.windowPos || '') === windowPos && sig(r.display) === sig(startDisplay) && !invalid(r) && wantPresets.split(',').every((p) => r.presets[p]) && (!wantLayout || r['theater x8']));
 }
 
 let child = null;
@@ -76,11 +79,11 @@ const runOnce = (cmd) => new Promise((resolve) => {
   child.on('exit', (code) => { child = null; resolve(code); });
 });
 
-async function one(site, theme, label, ref, round) {
-  const cmd = ['--site', site, '--theme', theme, '--ref', ref, '--label', label, '--round', String(round), '--presets', presets, '--out', out];
-  if (mode.layout && site.startsWith('yt')) cmd.push('--layout');
+async function one(site, theme, label, ref, round, usePresets = presets) {
+  const cmd = ['--site', site, '--theme', theme, '--ref', ref, '--label', label, '--round', String(round), '--presets', usePresets, '--out', out];
+  if (mode.layout && site.startsWith('yt') && ref !== 'NONE') cmd.push('--layout');
   if (windowPos) cmd.push('--window', windowPos);
-  if (args['expect-hdr'] && site === 'yt4k') cmd.push('--expect-hdr');
+  if (args['expect-hdr']) cmd.push('--expect-hdr'); // every site, so they share one colour pipeline; only yt4k asserts an HDR stream
   for (let attempt = 1; attempt <= 2; attempt++) {
     driftGuard();
     if (fs.existsSync(pauseFile(out))) { console.log(`\nPAUSE file found: stopping before ${site}/${theme}/${label}/${round}. Remove ${pauseFile(out)} and rerun to resume.`); process.exit(0); }
@@ -97,12 +100,16 @@ console.log(`test display: ${windowPos ? displayLabel(startDisplay) : 'window pl
 for (let round = 1; round <= rounds; round++) {
   for (const site of sites) {
     for (const theme of themes) {
-      if (cached(site, theme, round)) console.log(`[round ${round}] ${site}/${theme}/base: cached ${baseSha.slice(0, 7)}`);
+      if (cached(site, theme, round, 'base', BASE, presets)) console.log(`[round ${round}] ${site}/${theme}/base: cached ${baseSha.slice(0, 7)}`);
       else { console.log(`[round ${round}] ${site}/${theme}/base`); await one(site, theme, 'base', BASE, round); }
       console.log(`[round ${round}] ${site}/${theme}/cand`);
       await one(site, theme, 'cand', CAND, round);
+      if (withOff) {
+        if (cached(site, theme, round, 'off', 'NONE', 'default')) console.log(`[round ${round}] ${site}/${theme}/off: cached`);
+        else { console.log(`[round ${round}] ${site}/${theme}/off (no extension)`); await one(site, theme, 'off', 'NONE', round, 'default'); }
+      }
     }
   }
 }
-const c = spawnSync(process.execPath, [path.join(here, 'compare.mjs'), out, '--base', 'base', '--cand', 'cand'], { stdio: 'inherit' });
+const c = spawnSync(process.execPath, [path.join(here, 'compare.mjs'), out, '--base', 'base', '--cand', 'cand', ...(withOff ? ['--off', 'off'] : [])], { stdio: 'inherit' });
 process.exit(c.status ?? 1);

@@ -27,6 +27,7 @@ function make(label, round, o = {}) {
     presets: { default: { settings: { transparency: 50, intensity: 70, contrastTarget: 4.5 }, rootVars: {}, clips: { 'yt-lightshow': {
       cpu: { TaskDuration: 3.6 * (o.cpu || 1), ScriptDuration: 0.8, RecalcStyleDuration: 1.6, LayoutDuration: 0, LayoutCount: 1, RecalcStyleCount: 2000, longTasks: 0, longTaskMs: 0, frames: 576, dropped: o.dropped ?? 0 },
       series: series({ lag: o.lag ?? 2, amp: o.amp ?? 1 }), stills: [],
+      sys: { cpuPct: { browser: 5, renderer: 40 * (o.sysCpu || 1), gpu: 30 * (o.gpuCpu || 1), other: 2, total: 77 + 40 * ((o.sysCpu || 1) - 1) + 30 * ((o.gpuCpu || 1) - 1) }, rssMB: { total: { mean: 1500 * (o.ram || 1), max: 1600 }, renderer: { mean: 900, max: 950 }, gpu: { mean: 400, max: 420 }, browser: { mean: 200 }, other: { mean: 0 } }, rssGrowthMB: { browser: 0, renderer: o.growth || 2, gpu: 0, other: 0 }, gpuUtil: { mean: 30 + (o.gpuUtil || 0), max: 50 } },
     } } } },
     state: o.state || { lgClear: 5, canvases: 3 },
     errs: [],
@@ -53,6 +54,11 @@ const results = [
   judge('different element counts fail', { state: { lgClear: 4, canvases: 3 } }, { status: 1, text: ['element counts differ'] }),
   judge('30% more CPU warns, does not fail', { cpu: 1.3 }, { status: 0, text: ['WARN', 'main-thread time'] }),
   judge('5% more CPU is noise, passes', { cpu: 1.05 }, { status: 0, text: ['\nPASS'] }),
+  judge('+25 points of CPU warns', { sysCpu: 1.6 }, { status: 0, text: ['total CPU'] }),
+  judge('GPU-process CPU jump warns', { gpuCpu: 1.5 }, { status: 0, text: ['GPU-process CPU'] }),
+  judge('+30% RAM warns', { ram: 1.3 }, { status: 0, text: ['RAM 1500'] }),
+  judge('RAM growth warns (leak hint)', { growth: 300 }, { status: 0, text: ['leak?'] }),
+  judge('+20 GPU util points warns', { gpuUtil: 20 }, { status: 0, text: ['GPU busy'] }),
   judge('different display warns', { display: { w: 2560, h: 1440, scale: 1, hdr: false } }, { status: 0, text: ['not comparable'] }),
 ];
 const bad = results.filter((x) => !x).length;

@@ -12,7 +12,7 @@ import path from 'node:path';
 import { CHROMIUM, THRESHOLDS as T, args, loadPlaywright } from './lib.mjs';
 
 const dir = process.argv[2]?.startsWith('--') ? '/tmp/lg-perf' : process.argv[2] || '/tmp/lg-perf';
-const BASE = args.base || 'base', CAND = args.cand || 'cand';
+const BASE = args.base || 'base', CAND = args.cand || 'cand', OFF = args.off || null; // OFF: label of the no-extension control runs
 const runs = fs.readdirSync(dir).filter((f) => /^result-.*\.json$/.test(f)).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))).filter((r) => r.schema === 2);
 if (!runs.length) throw new Error(`no schema-2 result-*.json in ${dir}`);
 
@@ -37,6 +37,7 @@ function response(series) {
   return { lagMs: lag * 100, amp: std(a) };
 }
 
+const sysCols = (y) => (y ? { 'cpu% all': f(y.cpuTotal), 'cpu% rend': f(y.cpuRenderer), 'cpu% gpu-proc': f(y.cpuGpu), 'ram MB': f(y.ram), 'ram Δ MB': f(y.growth), 'gpu util%': f(y.gpuUtil) } : {});
 const verdicts = [];
 const add = (level, where, msg) => verdicts.push({ level, where, msg });
 const sites = [...new Set(runs.map((r) => r.site))];
@@ -55,13 +56,18 @@ async function pixelDiffs(pairs) {
     for (const [a, b] of items) {
       const A = px(await load(a)), B = px(await load(b));
       if (A.length !== B.length) { out.push({ mean: 255, pct: 100 }); continue; }
-      let sum = 0, over = 0;
+      let sum = 0, over = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      const W = (await load(a)).width;
       for (let i = 0; i < A.length; i += 4) {
         const d = (Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])) / 3;
         sum += d;
-        if (d > 24) over++;
+        if (d > 24) {
+          over++;
+          const px = (i / 4) % W, py = Math.floor(i / 4 / W);
+          if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py;
+        }
       }
-      out.push({ mean: sum / (A.length / 4), pct: (100 * over) / (A.length / 4) });
+      out.push({ mean: sum / (A.length / 4), pct: (100 * over) / (A.length / 4), box: over ? `${x0},${y0}–${x1},${y1}` : '' });
     }
     return out;
   }, payload);
@@ -81,6 +87,7 @@ for (const site of sites) {
     const picOf = (r) => `${r.ready?.w}x${r.ready?.h} ${String(r.ready?.stats?.codecs || '').split(' ')[0]}`;
     if (base.length && cand.length) {
       if (dispOf(base[0]) !== dispOf(cand[0])) add('WARN', tag, `base ran on ${dispOf(base[0])}, cand on ${dispOf(cand[0])}: numbers are not comparable`);
+      if (base[0].ready?.layout?.video !== cand[0].ready?.layout?.video) add('FAIL', tag, `the video sat at ${base[0].ready?.layout?.video} in base but ${cand[0].ready?.layout?.video} in cand: the page laid out differently, so frames and pixels are not comparable`);
       if (picOf(base[0]) !== picOf(cand[0])) add('WARN', tag, `base played ${picOf(base[0])}, cand ${picOf(cand[0])}: different stream, CPU and pixels are not comparable`);
     }
     if (!base.length || !cand.length) { add('FAIL', tag, `missing results (base ${base.length}, cand ${cand.length})`); continue; }
@@ -102,6 +109,17 @@ for (const site of sites) {
             task: cl.map((c) => c.cpu.TaskDuration), script: median(cl.map((c) => c.cpu.ScriptDuration)), style: median(cl.map((c) => c.cpu.RecalcStyleDuration)),
             longMs: median(cl.map((c) => c.cpu.longTaskMs)), dropped: median(cl.map((c) => c.cpu.dropped)), frames: median(cl.map((c) => c.cpu.frames)),
             lag: median(resp.map((x) => x.lagMs)), amp: median(resp.map((x) => x.amp)),
+            sys: (() => {
+              const sy = cl.map((c) => c.sys).filter(Boolean);
+              if (!sy.length) return null;
+              const pick = (fn) => median(sy.map(fn));
+              return {
+                cpuTotal: pick((x) => x.cpuPct.total), cpuTotals: sy.map((x) => x.cpuPct.total), cpuRenderer: pick((x) => x.cpuPct.renderer), cpuGpu: pick((x) => x.cpuPct.gpu), cpuBrowser: pick((x) => x.cpuPct.browser),
+                ram: pick((x) => x.rssMB.total.mean), ramRenderer: pick((x) => x.rssMB.renderer.mean), ramGpu: pick((x) => x.rssMB.gpu.mean),
+                growth: pick((x) => x.rssGrowthMB.renderer + x.rssGrowthMB.gpu + x.rssGrowthMB.browser + x.rssGrowthMB.other),
+                gpuUtil: pick((x) => x.gpuUtil?.mean ?? null),
+              };
+            })(),
             scrim: (() => { const s = cl.flatMap((c) => c.series.map((p) => p.sa).filter((x) => x != null)); return s.length ? `${f(Math.min(...s))}–${f(Math.max(...s))}` : '-'; })(),
           };
         };
@@ -109,14 +127,30 @@ for (const site of sites) {
         const s = cand[0].presets[preset].settings;
         console.log(`\n## ${where}   (transparency ${s.transparency}, intensity ${s.intensity}, contrast ${s.contrastTarget})`);
         console.table({
-          [BASE]: { rounds: b.n, 'task s': f(median(b.task)), 'script s': f(b.script), 'style s': f(b.style), 'long ms': f(b.longMs), dropped: f(b.dropped), frames: f(b.frames), 'lag ms': f(b.lag), 'amb swing': f(b.amp), 'scrim α': b.scrim },
-          [CAND]: { rounds: c.n, 'task s': f(median(c.task)), 'script s': f(c.script), 'style s': f(c.style), 'long ms': f(c.longMs), dropped: f(c.dropped), frames: f(c.frames), 'lag ms': f(c.lag), 'amb swing': f(c.amp), 'scrim α': c.scrim },
+          [BASE]: { rounds: b.n, 'task s': f(median(b.task)), 'script s': f(b.script), 'style s': f(b.style), 'long ms': f(b.longMs), dropped: f(b.dropped), frames: f(b.frames), 'lag ms': f(b.lag), 'amb swing': f(b.amp), 'scrim α': b.scrim, ...sysCols(b.sys) },
+          [CAND]: { rounds: c.n, 'task s': f(median(c.task)), 'script s': f(c.script), 'style s': f(c.style), 'long ms': f(c.longMs), dropped: f(c.dropped), frames: f(c.frames), 'lag ms': f(c.lag), 'amb swing': f(c.amp), 'scrim α': c.scrim, ...sysCols(c.sys) },
         });
         if (c.dropped > b.dropped + T.droppedSlack) add('FAIL', where, `dropped frames ${f(b.dropped)} → ${f(c.dropped)}`);
         if (c.lag != null && b.lag != null && c.lag > b.lag + T.lagMs) add('FAIL', where, `ambient lag ${b.lag} → ${c.lag} ms`);
         if (b.amp && c.amp != null && c.amp / b.amp < T.ambStdRatio) add('FAIL', where, `ambient swing ${f(b.amp)} → ${f(c.amp)} (flatter)`);
         const bt = median(b.task), ct = median(c.task), allow = Math.max(T.cpuRatio, 1 + 2 * spread(b.task));
         if (bt && ct / bt > allow) add('WARN', where, `main-thread time ${f(bt)} → ${f(ct)} s (×${(ct / bt).toFixed(2)}, allowed ×${allow.toFixed(2)})`);
+        if (b.sys && c.sys) {
+          const sp = spread(b.sys.cpuTotals) * (b.sys.cpuTotal || 0);
+          if (c.sys.cpuTotal - b.sys.cpuTotal > Math.max(T.sysCpuPts, 2 * sp)) add('WARN', where, `total CPU ${f(b.sys.cpuTotal)} → ${f(c.sys.cpuTotal)} % of a core (renderer ${f(b.sys.cpuRenderer)} → ${f(c.sys.cpuRenderer)}, GPU process ${f(b.sys.cpuGpu)} → ${f(c.sys.cpuGpu)}, browser ${f(b.sys.cpuBrowser)} → ${f(c.sys.cpuBrowser)})`);
+          if (c.sys.cpuGpu - b.sys.cpuGpu > T.gpuProcCpuPts) add('WARN', where, `GPU-process CPU ${f(b.sys.cpuGpu)} → ${f(c.sys.cpuGpu)} % of a core`);
+          if (b.sys.gpuUtil != null && c.sys.gpuUtil != null && c.sys.gpuUtil - b.sys.gpuUtil > T.gpuUtilPts) add('WARN', where, `GPU busy ${f(b.sys.gpuUtil)} → ${f(c.sys.gpuUtil)} % (system-wide)`);
+          if (b.sys.ram && c.sys.ram / b.sys.ram > T.ramRatio) add('WARN', where, `RAM ${f(b.sys.ram)} → ${f(c.sys.ram)} MB (×${(c.sys.ram / b.sys.ram).toFixed(2)})`);
+          if (c.sys.growth - b.sys.growth > T.ramGrowthMB) add('WARN', where, `RAM grew ${f(b.sys.growth)} → ${f(c.sys.growth)} MB over the window (leak?)`);
+          // the extension's own cost = this build minus the no-extension control on the same clip
+          const offRuns = OFF ? g.filter((r) => r.label === OFF && r.presets[preset]?.clips[clip]) : [];
+          if (offRuns.length) {
+            const o = median(offRuns.map((r) => r.presets[preset].clips[clip].sys?.cpuPct.total)), oram = median(offRuns.map((r) => r.presets[preset].clips[clip].sys?.rssMB.total.mean)), ogpu = median(offRuns.map((r) => r.presets[preset].clips[clip].sys?.gpuUtil?.mean));
+            const ob = b.sys.cpuTotal - o, oc = c.sys.cpuTotal - o;
+            console.log(`   extension cost vs no-extension control: CPU ${f(ob)} → ${f(oc)} pts of a core · RAM ${f(b.sys.ram - oram)} → ${f(c.sys.ram - oram)} MB · GPU busy ${ogpu == null || b.sys.gpuUtil == null ? '-' : f(b.sys.gpuUtil - ogpu)} → ${ogpu == null || c.sys.gpuUtil == null ? '-' : f(c.sys.gpuUtil - ogpu)} pts   (control: ${f(o)} % CPU, ${f(oram)} MB)`);
+            if (oc - ob > T.overheadPts) add('WARN', where, `the extension's own CPU cost rose ${f(ob)} → ${f(oc)} pts of a core`);
+          }
+        }
         if (c.longMs - b.longMs > T.longTaskMs) add('WARN', where, `long tasks ${f(b.longMs)} → ${f(c.longMs)} ms`);
       }
     }
@@ -147,6 +181,13 @@ for (const site of sites) {
         const a = stills(base[0]), b2 = stills(base[1]);
         for (const k of Object.keys(a)) if (b2[k]) { pairs.push([a[k], b2[k]]); meta.push({ k, kind: 'noise' }); }
       }
+      // stills that never settled: show where their two shots differ
+      const unstable = g.flatMap((r) => Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills.filter((st) => st.pair).map((st) => ({ r, st })))));
+      if (unstable.length) {
+        const ud = await pixelDiffs(unstable.map((u) => u.st.pair));
+        console.log('\nunstable stills (two shots 700 ms apart):');
+        console.table(Object.fromEntries(unstable.map((u, i) => [`${u.r.label} r${u.r.round} ${u.st.key}`, { 'mean Δ': f(ud[i].mean), '% >24': f(ud[i].pct), 'where x,y': ud[i].box }])));
+      }
       const res = await pixelDiffs(pairs);
       const noise = Object.fromEntries(meta.map((x, i) => [x.k, res[i]]).filter((_, i) => meta[i].kind === 'noise'));
       const rows = {};
@@ -154,7 +195,7 @@ for (const site of sites) {
         if (x.kind !== 'cand') return;
         const n = noise[x.k], tm = Math.max(T.visualMean, n ? 1.5 * n.mean : 0), tp = Math.max(T.visualPct, n ? 1.5 * n.pct : 0);
         const bad = res[i].mean > tm || res[i].pct > tp;
-        rows[x.k] = { 'mean Δ': f(res[i].mean), '% >24': f(res[i].pct), 'noise mean Δ': n ? f(n.mean) : '-', verdict: bad ? 'DIFF' : 'same' };
+        rows[x.k] = { 'mean Δ': f(res[i].mean), '% >24': f(res[i].pct), 'where x,y': res[i].box, 'noise mean Δ': n ? f(n.mean) : '-', verdict: bad ? 'DIFF' : 'same' };
         if (bad) add('FAIL', `${tag}/${x.k}`, `frozen frame differs: mean Δ ${f(res[i].mean)} (limit ${f(tm)}), ${f(res[i].pct)}% pixels > 24 (limit ${f(tp)})`);
       });
       if (Object.keys(rows).length) { console.log('\nfrozen frames, base vs cand:'); console.table(rows); }
