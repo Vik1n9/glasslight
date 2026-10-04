@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { CHROMIUM, PRESETS, SITES, THRESHOLDS, args, buildExtension, displayAt, loadPlaywright, measureSystem, resolveSha, sleep, startFocusGuard, waitForUserIdle } from './lib.mjs';
+import { CHROMIUM, HARNESS, PRESETS, SITES, THRESHOLDS, args, buildExtension, displayAt, loadPlaywright, measureSystem, resolveSha, sleep, startFocusGuard, waitForUserIdle } from './lib.mjs';
 
 const { site, ref = 'WORKTREE', label = ref, round = '1', theme = 'light', presets: presetArg = 'default', out = path.join(os.tmpdir(), 'lg-perf') } = args;
 // Where the test window opens, as "x,y" in top-left screen coordinates (e.g.
@@ -28,6 +28,9 @@ const cfg = SITES[site];
 if (!cfg) throw new Error('--site must be one of: ' + Object.keys(SITES).join(', '));
 if (!['light', 'dark'].includes(theme)) throw new Error('--theme must be light or dark');
 const presetNames = presetArg.split(',');
+// --clips a,b: only these clips of the site (a targeted dev loop); default all.
+const clips = args.clips ? cfg.clips.filter((c) => args.clips.split(',').includes(c.name)) : cfg.clips;
+if (!clips.length) throw new Error(`--clips matched none of ${cfg.clips.map((c) => c.name).join(', ')}`);
 for (const n of presetNames) if (!PRESETS[n]) throw new Error(`unknown preset ${n}; have ${Object.keys(PRESETS).join(', ')}`);
 
 const { chromium } = loadPlaywright();
@@ -69,7 +72,13 @@ if (launchMode === 'cdp') {
   if (!page) throw new Error('the background test window never attached');
   await page.emulateMedia({ colorScheme: theme });
   await page.setViewportSize({ width: 1440, height: 900 });
-  closeBrowser = async () => { await bcdp.send('Browser.close').catch(() => {}); setTimeout(() => proc.kill('SIGKILL'), 4000).unref(); };
+  const exited = new Promise((res) => proc.once('exit', res));
+  closeBrowser = async () => { // wait for Chromium to really go, so no orphan keeps eating CPU into the next run
+    await bcdp.send('Browser.close').catch(() => {});
+    if (await Promise.race([exited.then(() => true), sleep(5000).then(() => false)])) return;
+    proc.kill('SIGKILL');
+    await exited;
+  };
 } else {
   ctx = await chromium.launchPersistentContext(profileDir, {
     executablePath: CHROMIUM,
@@ -107,7 +116,7 @@ const VSEL = cfg.video;
 const quality = () => page.evaluate((s) => { const q = document.querySelector(s).getVideoPlaybackQuality(); return [q.totalVideoFrames, q.droppedVideoFrames]; }, VSEL);
 const seek = (t) => page.evaluate(([s, t]) => { const v = document.querySelector(s); v.muted = true; v.currentTime = t; v.play().catch(() => {}); }, [VSEL, t]);
 
-const result = { schema: 2, site, theme, label, ref, sha: resolveSha(ref), round, windowPos, display: displayAt(windowPos), startedAt: new Date().toISOString(), presets: {}, checks: [] };
+const result = { schema: 2, harness: HARNESS, clipsArg: args.clips || '', site, theme, label, ref, sha: resolveSha(ref), round, windowPos, display: displayAt(windowPos), startedAt: new Date().toISOString(), presets: {}, checks: [] };
 const T0 = Date.now(), timings = {}; // where the wall time goes: see result.timings
 const mark = (k) => { timings[k] = +((Date.now() - T0) / 1000).toFixed(1); };
 const check = (name, ok, detail = '') => result.checks.push({ name, ok: !!ok, detail: String(detail) });
@@ -152,8 +161,26 @@ async function waitPlayable() {
   return false;
 }
 
+// An ad that starts in the middle of a measured window (mid-rolls on long videos)
+// would be measured as if it were the clip: detect it, wait it out, redo that pass.
+const adPlaying = () => page.evaluate(([s, ani]) => {
+  if (!ani) return !!document.querySelector('.ad-showing');
+  const v = document.querySelector(s);
+  return !v || v.duration < 100;
+}, [VSEL, site === 'ani']);
+async function withoutAds(name, pass) {
+  for (let attempt = 1; ; attempt++) {
+    const out = await pass();
+    if (!(await adPlaying())) return out;
+    check(`${name}:ad-interrupted`, attempt < 3, `an ad played during the pass (attempt ${attempt})`);
+    if (attempt >= 3) return out;
+    await waitPlayable();
+  }
+}
+
 await page.goto(cfg.url, { waitUntil: 'domcontentloaded' });
-await sleep(4000);
+await page.waitForSelector(VSEL, { state: 'attached', timeout: 30000 }).catch(() => {});
+await sleep(1500);
 check('ads-cleared', await waitPlayable(), 'waited for pre-roll ads / age gate, never blocked');
 
 // Site theme. YouTube follows the emulated colour scheme from page load; the
@@ -161,7 +188,7 @@ check('ads-cleared', await waitPlayable(), 'waited for pre-roll ads / age gate, 
 if (site === 'ani') await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
 if (cfg.quality) {
   await page.evaluate((q) => document.getElementById('movie_player').setPlaybackQualityRange(q, q), cfg.quality);
-  await seek(cfg.clips[0].from - 4);
+  await seek(clips[0].from - 4);
   for (let i = 0; i < 20; i++) { // let the stream switch up to the pinned quality
     const h = await page.evaluate((s) => document.querySelector(s).videoHeight, VSEL);
     if (h >= Number(cfg.quality.replace('hd', ''))) break;
@@ -224,53 +251,58 @@ for (const name of presetNames) {
   const preset = { settings: PRESETS[name], rootVars, clips: {} };
   result.presets[name] = preset;
   if (!noExt) check(`${name}:preset-applied`, rootVars['--lg-transparency'] === (PRESETS[name].transparency / 100).toFixed(2), `--lg-transparency=${rootVars['--lg-transparency']}`);
-  for (const clip of cfg.clips) {
+  for (const clip of clips) {
     const r = { stills: [] };
     const dur = clip.to - clip.from;
     // A: CPU, nothing of ours in the page
-    await seek(clip.from - SETTLE);
-    await sleep(SETTLE * 1000);
-    const m0 = await metrics(), l0 = await lt(), q0 = await quality();
-    const t0 = await page.evaluate((s) => document.querySelector(s).currentTime, VSEL);
-    r.sys = await measureSystem(profileDir, () => sleep(dur * 1000));
-    const m1 = await metrics(), l1 = await lt(), q1 = await quality();
-    const t1 = await page.evaluate((s) => document.querySelector(s).currentTime, VSEL);
-    r.cpu = Object.fromEntries(KEYS.map((k) => [k, +(m1[k] - m0[k]).toFixed(4)]));
-    Object.assign(r.cpu, { longTasks: l1.n - l0.n, longTaskMs: +(l1.ms - l0.ms).toFixed(0), frames: q1[0] - q0[0], dropped: q1[1] - q0[1] });
-    check(`${name}/${clip.name}:playing`, t1 - t0 >= dur * 0.9, `media advanced ${(t1 - t0).toFixed(1)}s of ${dur}s`);
+    await withoutAds(`${name}/${clip.name}/cpu`, async () => {
+      await seek(clip.from - SETTLE);
+      await sleep(SETTLE * 1000);
+      const m0 = await metrics(), l0 = await lt(), q0 = await quality();
+      const t0 = await page.evaluate((s) => document.querySelector(s).currentTime, VSEL);
+      r.sys = await measureSystem(profileDir, () => sleep(dur * 1000));
+      const m1 = await metrics(), l1 = await lt(), q1 = await quality();
+      const t1 = await page.evaluate((s) => document.querySelector(s).currentTime, VSEL);
+      r.cpu = Object.fromEntries(KEYS.map((k) => [k, +(m1[k] - m0[k]).toFixed(4)]));
+      Object.assign(r.cpu, { longTasks: l1.n - l0.n, longTaskMs: +(l1.ms - l0.ms).toFixed(0), frames: q1[0] - q0[0], dropped: q1[1] - q0[1] });
+      r.mediaAdvanced = t1 - t0;
+    });
+    check(`${name}/${clip.name}:playing`, r.mediaAdvanced >= dur * 0.9, `media advanced ${r.mediaAdvanced.toFixed(1)}s of ${dur}s`);
 
     if (noExt) { preset.clips[clip.name] = r; continue; }
 
     // B: 10 Hz sampler of the extension's own canvases (#lg-ambient-canvas the
     // small ambient picture, #lg-scrim the legibility scrim alpha, #lg-glow the
     // halo) next to the source video's own luminance.
-    await seek(clip.from - SETTLE);
-    await sleep(SETTLE * 1000);
-    await page.evaluate(([s, ms]) => {
-      const v = document.querySelector(s);
-      const amb = document.getElementById('lg-ambient-canvas'), scr = document.getElementById('lg-scrim'), glow = document.getElementById('lg-glow');
-      const tmp = document.createElement('canvas');
-      tmp.width = 8; tmp.height = 4;
-      const tc = tmp.getContext('2d', { willReadFrequently: true });
-      const read = (src, alpha) => {
-        try {
-          tc.clearRect(0, 0, 8, 4);
-          tc.drawImage(src, 0, 0, 8, 4);
-          const d = tc.getImageData(0, 0, 8, 4).data;
-          let sum = 0;
-          for (let i = 0; i < d.length; i += 4) sum += alpha ? d[i + 3] : 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
-          return sum / 32;
-        } catch { return null; }
-      };
-      window.__series = [];
-      const t0 = performance.now();
-      const id = setInterval(() => {
-        window.__series.push({ vt: +v.currentTime.toFixed(2), vl: read(v), amb: read(amb), sa: read(scr, true), gl: read(glow) });
-        if (performance.now() - t0 > ms) clearInterval(id);
-      }, 100);
-    }, [VSEL, (dur + 1) * 1000]);
-    await sleep((dur + 1.5) * 1000);
-    r.series = await page.evaluate(() => window.__series);
+    await withoutAds(`${name}/${clip.name}/response`, async () => {
+      await seek(clip.from - SETTLE);
+      await sleep(SETTLE * 1000);
+      await page.evaluate(([s, ms]) => {
+        const v = document.querySelector(s);
+        const amb = document.getElementById('lg-ambient-canvas'), scr = document.getElementById('lg-scrim'), glow = document.getElementById('lg-glow');
+        const tmp = document.createElement('canvas');
+        tmp.width = 8; tmp.height = 4;
+        const tc = tmp.getContext('2d', { willReadFrequently: true });
+        const read = (src, alpha) => {
+          try {
+            tc.clearRect(0, 0, 8, 4);
+            tc.drawImage(src, 0, 0, 8, 4);
+            const d = tc.getImageData(0, 0, 8, 4).data;
+            let sum = 0;
+            for (let i = 0; i < d.length; i += 4) sum += alpha ? d[i + 3] : 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+            return sum / 32;
+          } catch { return null; }
+        };
+        window.__series = [];
+        const t0 = performance.now();
+        const id = setInterval(() => {
+          window.__series.push({ vt: +v.currentTime.toFixed(2), vl: read(v), amb: read(amb), sa: read(scr, true), gl: read(glow) });
+          if (performance.now() - t0 > ms) clearInterval(id);
+        }, 100);
+      }, [VSEL, (dur + 1) * 1000]);
+      await sleep((dur + 1.5) * 1000);
+      r.series = await page.evaluate(() => window.__series);
+    });
     const ok = r.series.filter((p) => p.vl != null && p.amb != null);
     if (ok.length > 20 && std(ok.map((p) => p.vl)) > 3) {
       const c = corr(ok.map((p) => p.vl), ok.map((p) => p.amb));
@@ -284,7 +316,7 @@ for (const name of presetNames) {
     for (const [i, t] of clip.stills.entries()) {
       await page.evaluate(([s, t]) => new Promise((res) => { const v = document.querySelector(s); v.pause(); v.addEventListener('seeked', () => res(), { once: true }); v.currentTime = t + 0.02; }), [VSEL, t]); // +0.02 s: the middle of a frame, so a seek can't land on either side of a boundary
       await page.mouse.move(1300, 880);
-      await sleep(1500);
+      await sleep(1000); // the stability check below catches anything still moving
       let pair = null, stable = false;
       for (let attempt = 0; attempt < 4 && !stable; attempt++) {
         const a = await page.screenshot({ clip: cfg.region });
@@ -311,7 +343,7 @@ for (const name of presetNames) {
 // ---- YouTube only, default settings: layout churn and SPA navigation --------
 if (site.startsWith('yt') && withLayout && !noExt) {
   await applyPreset('default');
-  await seek(cfg.clips[0].from);
+  await seek(clips[0].from);
   await sleep(2000);
   const run = async (name, fn) => {
     const m0 = await metrics(), l0 = await lt();
@@ -365,3 +397,5 @@ fs.writeFileSync(path.join(out, `result-${site}-${theme}-${label}-${round}.json`
 const failed = result.checks.filter((c) => !c.ok);
 console.log(`${site}/${theme}/${label}/${round}: ${result.checks.length - failed.length}/${result.checks.length} checks ok${failed.length ? ' — FAILED: ' + failed.map((c) => c.name).join(', ') : ''}`);
 await closeBrowser();
+// Each profile is ~70 MB and only the result and stills are needed afterwards.
+if (args['keep-profile'] === undefined) fs.rmSync(profileDir, { recursive: true, force: true });

@@ -2,6 +2,7 @@
 // the pass/fail thresholds live here so every tool judges by the same standard.
 import { createRequire } from 'node:module';
 import { execFile, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,6 +81,11 @@ export function loadPlaywright() {
   }
   throw new Error('playwright-core not found: npm i -g @playwright/cli, or set PLAYWRIGHT_CORE_DIR');
 }
+
+// Version of the measuring code itself. Results from a different harness (other
+// windows, waits or samplers) are not comparable, so the baseline cache and
+// compare.mjs both key on it.
+export const HARNESS = createHash('sha1').update(['lib.mjs', 'run.mjs'].map((f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), f), 'utf8')).join('\0')).digest('hex').slice(0, 10);
 
 export const CHROMIUM = process.env.CHROMIUM_PATH || '/Applications/Chromium.app/Contents/MacOS/Chromium';
 

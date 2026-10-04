@@ -11,6 +11,7 @@
 // drift lands on both sides. Exit code 1 means a hard failure.
 //
 //   --off               also run a no-extension control (default in full mode) so the extension's own CPU/GPU/RAM cost is separated from the page's
+//   --clips a,b         only these clips (e.g. ani-white), for a targeted loop
 //   --window x,y        open the test window on another display (or LG_PERF_WINDOW)
 //   --expect-display WxH  refuse to run unless that display has this resolution
 //   --expect-hdr        the display must be in HDR mode and the 4K stream must really be HDR
@@ -23,12 +24,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { args, displayAt, displayLabel, pauseFile, resolveSha } from './lib.mjs';
+import { HARNESS, args, displayAt, displayLabel, pauseFile, resolveSha } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MODES = {
-  // quick: the dev loop. One site, default settings, no layout churn: about 1.5 min when the baseline is cached.
-  quick: { sites: 'yt', themes: 'light', presets: 'default', rounds: 1, layout: false, off: false },
+  // quick: the dev loop. One site, default settings, no layout churn: about 1 min when the baseline is cached.
+  // Dark, because on YouTube the legibility scrim only engages in dark (in light it stays at 0), so a
+  // light-only loop would never exercise it.
+  quick: { sites: 'yt', themes: 'dark', presets: 'default', rounds: 1, layout: false, off: false },
   // full: every site, both themes, all settings in round 1; later rounds repeat only the default
   // settings (they calibrate noise and CPU variance; the display of the extremes needs one look).
   // Layout churn and SPA navigation run once, on YouTube light.
@@ -75,7 +78,7 @@ function cached(site, theme, round, label, ref, wantPresets) {
   if (sha === 'WORKTREE' || args.aa) return false;
   const r = read(resultPath(site, theme, label, round));
   const wantLayout = layoutFor(site, theme) && ref !== 'NONE';
-  return !!(r && r.sha === sha && (r.windowPos || '') === windowPos && sig(r.display) === sig(startDisplay) && !invalid(r) && wantPresets.split(',').every((p) => r.presets[p]) && (!wantLayout || r['theater x8']));
+  return !!(r && r.sha === sha && r.harness === HARNESS && (r.clipsArg || '') === (args.clips || '') && (r.windowPos || '') === windowPos && sig(r.display) === sig(startDisplay) && !invalid(r) && wantPresets.split(',').every((p) => r.presets[p]) && (!wantLayout || r['theater x8']));
 }
 
 let child = null;
@@ -92,7 +95,7 @@ async function one(site, theme, label, ref, round, usePresets) {
   const cmd = ['--site', site, '--theme', theme, '--ref', ref, '--label', label, '--round', String(round), '--presets', usePresets, '--out', out];
   if (layoutFor(site, theme) && ref !== 'NONE') cmd.push('--layout');
   if (windowPos) cmd.push('--window', windowPos);
-  for (const k of ['launch', 'idle']) if (args[k] !== undefined) cmd.push('--' + k, args[k]);
+  for (const k of ['launch', 'idle', 'clips']) if (args[k] !== undefined) cmd.push('--' + k, args[k]);
   if (args['expect-hdr']) cmd.push('--expect-hdr'); // every site, so they share one colour pipeline; only yt4k asserts an HDR stream
   for (let attempt = 1; attempt <= 2; attempt++) {
     driftGuard();
@@ -105,7 +108,7 @@ async function one(site, theme, label, ref, round, usePresets) {
   }
 }
 
-console.log(`suite (${args.mode || 'quick'}): base=${BASE} (${baseSha.slice(0, 7)}) cand=${args.aa ? BASE + ' (A/A)' : CAND} sites=${sites} themes=${themes} presets=${presets} rounds=${rounds}`);
+console.log(`suite (${args.mode || 'quick'}, harness ${HARNESS}): base=${BASE} (${baseSha.slice(0, 7)}) cand=${args.aa ? BASE + ' (A/A)' : CAND} sites=${sites} themes=${themes} presets=${presets} rounds=${rounds}`);
 console.log(`test display: ${windowPos ? displayLabel(startDisplay) : 'window placement not pinned (use --window x,y)'}`);
 for (let round = 1; round <= rounds; round++) {
   const ps = presetsFor(round);

@@ -20,7 +20,7 @@ function series({ lag = 2, amp = 1 }) {
 }
 function make(label, round, o = {}) {
   return {
-    schema: 2, site: 'yt', theme: 'light', label, ref: label, sha: label === 'base' ? 'aaaaaaa' : 'bbbbbbb', round: String(round), windowPos: '-1920,0',
+    schema: 2, harness: o.harness || 'h1', site: 'yt', theme: 'light', label, ref: label, sha: label === 'base' ? 'aaaaaaa' : 'bbbbbbb', round: String(round), windowPos: '-1920,0',
     display: o.display || { w: 1920, h: 1080, scale: 2, hdr: false },
     ready: { w: 1920, h: 1080, stats: { res: '1920x1080@30', codecs: 'vp09.00 / opus' }, dark: false, canvases: 3 },
     checks: o.checks || [{ name: 'extension-active', ok: true, detail: '' }],
@@ -59,6 +59,7 @@ const results = [
   judge('+30% RAM warns', { ram: 1.3 }, { status: 0, text: ['RAM 1500'] }),
   judge('RAM growth warns (leak hint)', { growth: 300 }, { status: 0, text: ['leak?'] }),
   judge('+20 GPU util points warns', { gpuUtil: 20 }, { status: 0, text: ['GPU busy'] }),
+  judge('baseline from another harness version fails', { harness: 'h2' }, { status: 1, text: ['rerun the baseline'] }),
   judge('different display warns', { display: { w: 2560, h: 1440, scale: 1, hdr: false } }, { status: 0, text: ['not comparable'] }),
 ];
 const bad = results.filter((x) => !x).length;
