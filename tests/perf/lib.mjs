@@ -91,6 +91,22 @@ export const CHROMIUM = process.env.CHROMIUM_PATH || '/Applications/Chromium.app
 
 export const resolveSha = (ref) => (ref === 'WORKTREE' || ref === 'NONE' ? ref : execFileSync('git', ['-C', ROOT, 'rev-parse', ref], { encoding: 'utf8' }).trim());
 
+// What code a run measured: the commit for a ref, a hash of the shipped files for
+// the working tree (which changes with every edit). Debug mode uses it to tell
+// which candidate results predate the latest fix.
+export function buildFingerprint(ref) {
+  if (ref === 'NONE') return 'NONE';
+  if (ref !== 'WORKTREE') return resolveSha(ref);
+  const h = createHash('sha1');
+  const walk = (p) => {
+    const st = fs.statSync(p);
+    if (st.isDirectory()) for (const e of fs.readdirSync(p).sort()) walk(path.join(p, e));
+    else h.update(path.relative(ROOT, p)).update('\0').update(fs.readFileSync(p));
+  };
+  for (const item of ['manifest.json', '_locales', 'icons', 'src']) walk(path.join(ROOT, item));
+  return 'worktree:' + h.digest('hex').slice(0, 10);
+}
+
 // Unpacked build of `ref` (or the working tree) without dev-reload, so the
 // extension never reloads itself mid-run.
 export function buildExtension(ref, dir) {

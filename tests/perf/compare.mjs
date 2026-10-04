@@ -13,7 +13,9 @@ import { CHROMIUM, THRESHOLDS as T, args, loadPlaywright } from './lib.mjs';
 
 const dir = process.argv[2]?.startsWith('--') ? '/tmp/lg-perf' : process.argv[2] || '/tmp/lg-perf';
 const BASE = args.base || 'base', CAND = args.cand || 'cand', OFF = args.off || null; // OFF: label of the no-extension control runs
-const runs = fs.readdirSync(dir).filter((f) => /^result-.*\.json$/.test(f)).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))).filter((r) => r.schema === 2);
+let runs = fs.readdirSync(dir).filter((f) => /^result-.*\.json$/.test(f)).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))).filter((r) => r.schema === 2);
+// --only yt/dark,ani/light: judge just these site/theme cells (debug mode checks each cell as soon as it is measured)
+if (args.only) { const only = new Set(args.only.split(',')); runs = runs.filter((r) => only.has(`${r.site}/${r.theme}`)); }
 if (!runs.length) throw new Error(`no schema-2 result-*.json in ${dir}`);
 
 const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
@@ -41,6 +43,8 @@ const sysCols = (y) => (y ? { 'cpu% all': f(y.cpuTotal), 'cpu% rend': f(y.cpuRen
 const verdicts = [];
 const add = (level, where, msg) => verdicts.push({ level, where, msg });
 const sites = [...new Set(runs.map((r) => r.site))];
+const expected = new Set((args.expect || '').split(',').filter(Boolean)); // site/theme cells the plan ran: suite.mjs passes them
+for (const e of expected) if (!runs.some((r) => `${r.site}/${r.theme}` === e)) add('FAIL', e, 'the plan expected this site/theme but no run left a result');
 
 // ---- frozen-frame pixel diff, done in a headless page so no image library is needed
 async function pixelDiffs(pairs) {
@@ -91,6 +95,9 @@ for (const site of sites) {
       if (base[0].ready?.layout?.video !== cand[0].ready?.layout?.video) add('FAIL', tag, `the video sat at ${base[0].ready?.layout?.video} in base but ${cand[0].ready?.layout?.video} in cand: the page laid out differently, so frames and pixels are not comparable`);
       if (picOf(base[0]) !== picOf(cand[0])) add('WARN', tag, `base played ${picOf(base[0])}, cand ${picOf(cand[0])}: different stream, CPU and pixels are not comparable`);
     }
+    // Only judge what this plan measured: a site x theme left over from another plan
+    // (base only, no candidate) is skipped; one the plan expected but lacks fails.
+    if (!cand.length && !expected.has(tag)) { console.log('   (not part of this comparison: no candidate run)'); continue; }
     if (!base.length || !cand.length) { add('FAIL', tag, `missing results (base ${base.length}, cand ${cand.length})`); continue; }
 
     // absolute checks
@@ -212,4 +219,4 @@ console.log('\n==== verdict ====');
 for (const v of verdicts) console.log(`${v.level.padEnd(4)} ${v.where}: ${v.msg}`);
 const fails = verdicts.filter((v) => v.level === 'FAIL').length, warns = verdicts.filter((v) => v.level === 'WARN').length;
 console.log(fails ? `FAIL — ${fails} hard failure(s), ${warns} warning(s)` : warns ? `PASS with ${warns} warning(s)` : 'PASS');
-process.exit(fails ? 1 : 0);
+process.exit(fails || (args['fail-on-warn'] && warns) ? 1 : 0); // --fail-on-warn: debug mode stopping on warnings too
