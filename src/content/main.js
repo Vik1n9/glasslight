@@ -68,12 +68,20 @@
 
   // Player controls: tag the pill groups YouTube paints with a translucent
   // fill (delhi-modern player) as Clear-variant glass.
+  // Runs every 2 s, and getComputedStyle forces a style resolve on YouTube's
+  // large DOM, so decisions are cached per element: re-rendered chrome nodes
+  // are new elements and still get scanned, and hidden ones (width 0, e.g.
+  // mode-specific buttons) stay open for a later pass. A pill's fill is
+  // static once measurable, so a decided element is never read again.
+  const controlDecided = new WeakSet();
   function tagPlayerControls() {
     for (const el of document.querySelectorAll('.ytp-chrome-controls *:not(.lg-clear)')) {
-      if (el.closest('.lg-clear')) continue;
+      if (controlDecided.has(el) || el.closest('.lg-clear')) continue;
+      if (el.offsetWidth < 24) continue; // not laid out yet — decide later
+      controlDecided.add(el);
       const bg = getComputedStyle(el).backgroundColor;
       const alpha = bg.startsWith('rgba') ? parseFloat(bg.split(',')[3]) : bg === 'transparent' ? 0 : 1;
-      if (alpha > 0.05 && alpha < 1 && el.offsetWidth >= 24) {
+      if (alpha > 0.05 && alpha < 1) {
         el.classList.add('lg-clear');
         if (refractionOn()) LG.refract.attach(el, { radius: el.offsetHeight / 2, bezel: 10, scale: 18, blur: 8, saturate: 1.6 });
       }
@@ -181,6 +189,9 @@
           stripped.classes.push([el, c]);
         }
       }
+      // Our own attribute writes retrigger the observer below; drop those
+      // records so one theater-mode toggle costs one scan, not two.
+      mastheadObserver?.takeRecords();
     }
     if (mastheadObserver?.target === masthead) return;
     mastheadObserver?.disconnect();
@@ -348,7 +359,8 @@
       if (document.hidden) return;
       decorate();
       fitPlaylist();
-      if ((isWatch() || isShorts()) && mainVideo()) LG.ambient.bindVideo(mainVideo());
+      const v = isWatch() || isShorts() ? mainVideo() : null;
+      if (v) LG.ambient.bindVideo(v);
     }, 2000);
   }
 

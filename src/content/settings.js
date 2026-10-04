@@ -43,8 +43,14 @@ LG.loadSettings = async () => {
   return LG.settings;
 };
 
-LG.prefersReducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-LG.prefersReducedTransparency = () => matchMedia('(prefers-reduced-transparency: reduce)').matches;
+// Cached MediaQueryLists: prefersReducedMotion is read on every video frame
+// (drawVideo's default) and on every animation frame, and matchMedia()
+// allocates a fresh list per call. `.matches` on an existing list is a cheap
+// property read; the platform keeps it current.
+const mqMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const mqTransparency = matchMedia('(prefers-reduced-transparency: reduce)');
+LG.prefersReducedMotion = () => mqMotion.matches;
+LG.prefersReducedTransparency = () => mqTransparency.matches;
 LG.isDarkTheme = () => document.documentElement.hasAttribute('dark');
 
 // How far the Transparency slider is past its designed midpoint, 0–1: glass

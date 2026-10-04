@@ -349,13 +349,14 @@
 
   // The picture inside the video element (object-fit: contain) in viewport
   // px, and the viewport it is measured in. Measured with the other layout
-  // reads (placeGlow), never per frame.
+  // reads (placeGlow), never per frame. `panel` is the shared side-panel
+  // edge placeGlow already measured for the halo.
   let picBox = null;
   let viewW = 1;
   let viewH = 1;
   let radialShown = false;
 
-  function measurePicture() {
+  function measurePicture(panel) {
     if (!video?.videoWidth || !video.videoHeight) {
       picBox = null;
       return false;
@@ -374,8 +375,6 @@
     const next = { x: r.left + (r.width - w) / 2, y: r.top + (r.height - h) / 2, w, h };
     // What the enlarged frame stops at (enlargedBox): a side panel right of
     // the player, and the description under it.
-    const player = video.closest(playerSelector());
-    const panel = player ? panelEdgeRightOf(player.getBoundingClientRect()) : innerWidth;
     next.panel = panel < innerWidth ? panel : null;
     const desc = document.querySelector(DESCRIPTION());
     const dr = desc?.getBoundingClientRect();
@@ -544,10 +543,15 @@
   }
 
   // Re-measure the layout the light depends on: the picture the radial
-  // backdrop is anchored to, and the player the glow frames.
+  // backdrop is anchored to, and the player the glow frames. The player rect
+  // and its side-panel edge are read once here and shared — measurePicture
+  // and placeHalo each used to find them separately.
   function placeGlow() {
-    const moved = measurePicture();
-    placeHalo();
+    const player = video?.closest(playerSelector());
+    const playerRect = player ? player.getBoundingClientRect() : null;
+    const clipAt = playerRect ? panelEdgeRightOf(playerRect) : innerWidth;
+    const moved = measurePicture(clipAt);
+    placeHalo(player, playerRect, clipAt);
     // A paused frame doesn't redraw by itself: re-anchor it after scrolling.
     // After the reads above, so its class toggle can't force a layout.
     if (moved && videoLive() && video.paused && active()) {
@@ -560,14 +564,8 @@
   }
 
   // Keep the glow canvas scaled onto the player's on-screen rect.
-  function placeHalo() {
-    const player = video?.closest(playerSelector());
-    if (!glow || !player) return;
-    const r = player.getBoundingClientRect();
-    // Side panels right of the player (playlist, live chat, recommendations
-    // column; theater-mode chat) are content: the halo stops at their edge
-    // instead of washing over part of them.
-    const clipAt = panelEdgeRightOf(r);
+  function placeHalo(player, r, clipAt) {
+    if (!glow || !player || !r) return;
     const key = `${r.left | 0},${r.top | 0},${r.width | 0},${r.height | 0},${clipAt | 0}`;
     if (key === glowKey) return;
     glowKey = key;
@@ -948,14 +946,18 @@
     const from = shownScrim.slice();
     const t0 = performance.now();
     const d = scrimImg.data;
+    // The colour channels are constant for the whole ease: fill them once,
+    // then the per-frame loop only touches alpha.
+    for (let c = 0; c < target.length; c += 1) {
+      d[c * 4] = r;
+      d[c * 4 + 1] = g;
+      d[c * 4 + 2] = b;
+    }
     cancelAnimationFrame(scrimRaf);
     const step = (now) => {
       const f = from[0] < 0 || LG.prefersReducedMotion() ? 1 : Math.min(1, (now - t0) / 240);
       for (let c = 0; c < target.length; c += 1) {
         shownScrim[c] = f === 1 ? target[c] : from[c] + (target[c] - from[c]) * f;
-        d[c * 4] = r;
-        d[c * 4 + 1] = g;
-        d[c * 4 + 2] = b;
         d[c * 4 + 3] = Math.round(shownScrim[c] * 255);
       }
       smctx.putImageData(scrimImg, 0, 0);

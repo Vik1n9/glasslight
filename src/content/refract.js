@@ -71,6 +71,21 @@
     return canvas.toDataURL('image/png');
   }
 
+  // toDataURL is a synchronous PNG encode (~ms on bar-sized maps), and the
+  // same few sizes come back whenever the player toggles theater mode or the
+  // window returns to a previous width: keep the encoded maps around.
+  const mapCache = new Map(); // `${w}x${h}x${radius}x${bezel}` -> data URL
+  function mapFor(w, h, opts) {
+    const key = `${w}x${h}x${opts.radius}x${opts.bezel}`;
+    let url = mapCache.get(key);
+    if (!url) {
+      url = buildMap(w, h, opts.radius, opts.bezel);
+      if (mapCache.size >= 48) mapCache.delete(mapCache.keys().next().value); // drag-resizes
+      mapCache.set(key, url);
+    }
+    return url;
+  }
+
   function writeFilter(id, w, h, opts) {
     const root = ensureDefs();
     let filter = root.querySelector(`#${id}`);
@@ -91,7 +106,7 @@
     const image = filter.querySelector('feImage');
     image.setAttribute('width', w);
     image.setAttribute('height', h);
-    image.setAttribute('href', buildMap(w, h, opts.radius, opts.bezel));
+    image.setAttribute('href', mapFor(w, h, opts));
     filter.querySelector('feDisplacementMap').setAttribute('scale', opts.scale);
     filter.querySelector('feColorMatrix').setAttribute('values', opts.saturate);
     filter.querySelector('feGaussianBlur').setAttribute('stdDeviation', frostOf(opts));
