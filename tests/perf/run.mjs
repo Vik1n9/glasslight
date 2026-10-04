@@ -38,10 +38,11 @@ const noExt = ref === 'NONE';
 const ext = noExt ? null : buildExtension(ref, path.join(out, `ext-${label}`));
 const profileDir = path.join(out, `profile-${site}-${theme}-${label}-${round}`);
 // How the test browser is started (see lib.mjs, "keep the test browser from taking
-// the keyboard"). --launch cdp starts Chromium with no window and creates the test
-// window in the background over CDP; the default, playwright, lets Playwright launch it.
-const launchMode = args.launch || 'playwright';
-await waitForUserIdle(Number(args.idle ?? 8), 'launching the test browser');
+// the keyboard"). The default, cdp, starts Chromium with no window and creates the test
+// window in the background over CDP: verified to never take focus. --launch playwright
+// lets Playwright launch it instead, which grabs focus, so that mode waits for idle first.
+const launchMode = args.launch || 'cdp';
+await waitForUserIdle(Number(args.idle ?? (launchMode === 'cdp' ? 0 : 8)), 'launching the test browser');
 const focusGuard = startFocusGuard();
 const chromeFlags = [
   ...(noExt ? [] : [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`]),

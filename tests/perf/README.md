@@ -58,15 +58,14 @@ node tests/perf/compare.mjs /tmp/lg-perf
 守衛會把前景還給「Chromium 之前的那個程式」，所以測試期間不要自己點進測試視窗。
 
 Chromium 一啟動就會取得 app 焦點（macOS 上 `open -g` 也擋不住），這是唯一會打斷你輸入的時刻。
-所以有三層防護，由內而外：
-1. **閒置才啟動**（`--idle N`，預設 8 秒，0 關閉）：每次啟動瀏覽器前先讀鍵盤滑鼠的閒置時間，
-   你停手超過 N 秒才開，否則等待（每 30 秒印一次提示）。
-2. **背景建立視窗**（`--launch cdp`）：Chromium 以 `--no-startup-window` 啟動，測試視窗改由 CDP
-   以背景方式建立，再用 `connectOverCDP` 接上。目的是連啟動那一刻都不取得焦點。
-   **這條路尚未驗證**，所以預設仍是 `--launch playwright`；驗證要真的啟動一次瀏覽器，請在你方便被
-   打斷的時候做：`node tests/perf/run.mjs --site yt --ref HEAD --launch cdp --window 0,0`，
-   看結果的 `focusSteals` 是否為 0。通過後再把預設改成 `cdp`。
-3. **焦點守衛**：萬一仍拿到焦點，0.25 秒內還給原本的程式。
+預設的 `--launch cdp` 把它避開了：Chromium 以 `--no-startup-window` 啟動（沒有視窗，也就沒有東西可搶焦點），
+測試視窗改由 CDP 以背景方式建立，再用 `connectOverCDP` 接上。**已實測**：一次完整 YouTube 執行約
+2 分鐘，每 0.2 秒記錄前景程式，全程沒有離開原本的終端機，結果的 `focusSteals` 為 0。
+
+另有兩層備援：
+- `--launch playwright`（舊方式，由 Playwright 啟動，會搶焦點）時，每次啟動前先等你的鍵盤滑鼠
+  閒置 `--idle N` 秒（此模式預設 8，0 關閉），你停手才開。
+- **焦點守衛**：萬一仍拿到焦點，0.25 秒內還給原本的程式；次數記在 `focusSteals`。
 
 其他：
 - 基準以 commit sha 快取，基準沒變就不重跑；候選每次都重跑。

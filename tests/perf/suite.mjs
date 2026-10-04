@@ -14,8 +14,8 @@
 //   --window x,y        open the test window on another display (or LG_PERF_WINDOW)
 //   --expect-display WxH  refuse to run unless that display has this resolution
 //   --expect-hdr        the display must be in HDR mode and the 4K stream must really be HDR
-//   --launch cdp        start Chromium with no window and open the test window in the background (meant to never take focus)
-//   --idle N            only launch a browser after N seconds without keyboard/mouse (default 8, 0 = off)
+//   --launch playwright  let Playwright launch the browser (default: cdp, a background window that never takes focus)
+//   --idle N            only launch a browser after N seconds without keyboard/mouse (default 0 for cdp, 8 for playwright)
 //   touch <out>/PAUSE   finish the current run, then stop; delete the file and rerun to resume
 //   Ctrl-C / SIGTERM    stop now, closing the browser; finished runs are kept
 import { spawn, spawnSync } from 'node:child_process';
