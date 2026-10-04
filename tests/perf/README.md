@@ -49,8 +49,13 @@ node tests/perf/compare.mjs /tmp/lg-perf
 螢幕的 HDR（YouTube 只送 SDR），所以 `--expect-hdr` 也會拿掉該旗標，且對該次套件的每個站一律如此，
 維持同一條色彩管線。螢幕資訊寫進每個結果，
 新舊不一致時 `compare.mjs` 警告「數字不可比」，基準快取也隨之失效。
-視窗要保持在前景、不被遮住或最小化，否則瀏覽器會降低 rAF 頻率；每組設定都有
-`foreground` 檢查。
+**不搶你的鍵盤**：測試視窗放在另一個螢幕、全程不需要焦點，腳本不呼叫 `bringToFront`、不開
+額外分頁（設定直接在擴充功能內容腳本的 JS 環境裡寫入 `chrome.storage`，凍結畫面的比對也在
+同一頁完成）。Chromium 啟動時會搶一次 app 焦點，所以 `run.mjs` 內建「焦點守衛」：記住原本在
+前景的程式，Chromium 一拿到焦點就在 1 秒內還回去，次數寫進結果的 `focusSteals`（macOS）。
+視窗要保持可見、別被別的視窗蓋住或最小化（被遮住會降低渲染頻率；我們另加了
+`--disable-backgrounding-occluded-windows` 等旗標，且每組設定都有 `visible` 檢查）。
+守衛會把前景還給「Chromium 之前的那個程式」，所以測試期間不要自己點進測試視窗。
 
 其他：
 - 基準以 commit sha 快取，基準沒變就不重跑；候選每次都重跑。

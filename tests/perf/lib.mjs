@@ -1,7 +1,7 @@
 // Shared definitions for the perf harness: the clips, the settings presets and
 // the pass/fail thresholds live here so every tool judges by the same standard.
 import { createRequire } from 'node:module';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -211,4 +211,27 @@ export async function measureSystem(profileDir, during, everyMs = 1000) {
   out.cpuPct.total = Object.values(out.cpuPct).reduce((a, b) => a + b, 0);
   out.rssMB.total = { mean: Object.values(out.rssMB).reduce((a, b) => a + b.mean, 0), max: Object.values(out.rssMB).reduce((a, b) => a + b.max, 0) };
   return out;
+}
+
+// ---- keep the test browser from taking the keyboard ---------------------------
+// The test window lives on its own display and must never take typing away from
+// the work on the other one. Chromium grabs app focus when it starts and when
+// tabs open; this remembers whichever app had focus and hands it back within a
+// second whenever the test browser holds it. (macOS only; elsewhere a no-op.)
+const osa = (script) => new Promise((resolve) => execFile('osascript', ['-e', script], { encoding: 'utf8' }, (err, out) => resolve(err ? null : out.trim())));
+export function startFocusGuard(testApp = 'Chromium') {
+  if (process.platform !== 'darwin') return { stop() {}, steals: 0 };
+  const g = { steals: 0, stop: () => { clearInterval(timer); }, busy: false };
+  let prev = null;
+  const tick = async () => {
+    if (g.busy) return;
+    g.busy = true;
+    const now = await osa('tell application "System Events" to get name of first application process whose frontmost is true');
+    if (now && now !== testApp) prev = now;
+    else if (now === testApp && prev) { await osa(`tell application "${prev}" to activate`); g.steals++; }
+    g.busy = false;
+  };
+  const timer = setInterval(tick, 1000);
+  tick();
+  return g;
 }

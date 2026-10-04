@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CHROMIUM, PRESETS, SITES, THRESHOLDS, args, buildExtension, displayAt, loadPlaywright, measureSystem, resolveSha, sleep } from './lib.mjs';
+import { CHROMIUM, PRESETS, SITES, THRESHOLDS, args, buildExtension, displayAt, loadPlaywright, measureSystem, resolveSha, sleep, startFocusGuard } from './lib.mjs';
 
 const { site, ref = 'WORKTREE', label = ref, round = '1', theme = 'light', presets: presetArg = 'default', out = path.join(os.tmpdir(), 'lg-perf') } = args;
 // Where the test window opens, as "x,y" in top-left screen coordinates (e.g.
@@ -34,6 +34,7 @@ fs.mkdirSync(out, { recursive: true });
 const noExt = ref === 'NONE';
 const ext = noExt ? null : buildExtension(ref, path.join(out, `ext-${label}`));
 const profileDir = path.join(out, `profile-${site}-${theme}-${label}-${round}`);
+const focusGuard = startFocusGuard();
 const ctx = await chromium.launchPersistentContext(profileDir, {
   executablePath: CHROMIUM,
   headless: false,
@@ -43,7 +44,9 @@ const ctx = await chromium.launchPersistentContext(profileDir, {
   // from the page (dynamic-range: high = false) so YouTube only sends SDR. With
   // --expect-hdr that flag is dropped for every site, keeping the pipeline identical.
   ignoreDefaultArgs: ['--enable-automation', ...(args['expect-hdr'] ? ['--force-color-profile=srgb'] : [])],
-  args: [...(noExt ? [] : [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`]), '--autoplay-policy=no-user-gesture-required', '--mute-audio', '--disable-blink-features=AutomationControlled', ...(windowPos ? [`--window-position=${windowPos}`] : [])],
+  args: [...(noExt ? [] : [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`]), '--autoplay-policy=no-user-gesture-required', '--mute-audio', '--disable-blink-features=AutomationControlled',
+    // The window sits unfocused on its own display: keep it rendering at full rate anyway.
+    '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', ...(windowPos ? [`--window-position=${windowPos}`] : [])],
 });
 await ctx.addInitScript(() => {
   window.__lt = { n: 0, ms: 0, errs: [] };
@@ -57,7 +60,7 @@ await ctx.addInitScript(() => {
   } catch {}
   window.addEventListener('error', (e) => __lt.errs.push(String(e.message)));
 });
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { await ctx.close().catch(() => {}); process.exit(130); });
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { focusGuard.stop(); await ctx.close().catch(() => {}); process.exit(130); });
 const page = ctx.pages()[0] || (await ctx.newPage());
 const cdp = await ctx.newCDPSession(page);
 await cdp.send('Performance.enable');
@@ -71,20 +74,17 @@ const seek = (t) => page.evaluate(([s, t]) => { const v = document.querySelector
 const result = { schema: 2, site, theme, label, ref, sha: resolveSha(ref), round, windowPos, display: displayAt(windowPos), startedAt: new Date().toISOString(), presets: {}, checks: [] };
 const check = (name, ok, detail = '') => result.checks.push({ name, ok: !!ok, detail: String(detail) });
 
-// A hidden or unfocused tab throttles rAF and timers, which would skew every number.
-const foreground = () => page.evaluate(() => document.visibilityState === 'visible' && document.hasFocus());
+// A hidden tab throttles rAF and timers, which would skew every number. Focus does
+// not matter (the window is deliberately unfocused), visibility does.
+const visible = () => page.evaluate(() => document.visibilityState === 'visible');
 
 // Two shots of a frozen frame never match byte for byte (decoder dithering, GPU
 // rounding). They are "the same" when the mean difference is invisible and next
 // to no pixel moved by more than 8 levels.
-const toolPage = await ctx.newPage(); // a scratch tab to decode PNGs with a canvas
-await toolPage.goto('about:blank');
-await page.bringToFront();
 const nearlyIdentical = async (a, b) => {
-  const d = await toolPage.evaluate(async ([x, y]) => {
-    const load = (b64) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = 'data:image/png;base64,' + b64; });
-    const px = (img) => { const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0); return g.getImageData(0, 0, c.width, c.height).data; };
-    const A = px(await load(x)), B = px(await load(y));
+  const d = await page.evaluate(async ([x, y]) => {
+    const decode = async (b64) => { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const bmp = await createImageBitmap(new Blob([u], { type: 'image/png' })); const c = new OffscreenCanvas(bmp.width, bmp.height); const g = c.getContext('2d'); g.drawImage(bmp, 0, 0); return g.getImageData(0, 0, bmp.width, bmp.height).data; };
+    const A = await decode(x), B = await decode(y);
     if (A.length !== B.length) return { mean: 255, pct: 100 };
     let sum = 0, over = 0;
     for (let i = 0; i < A.length; i += 4) { const e = (Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])) / 3; sum += e; if (e > 8) over++; }
@@ -150,17 +150,28 @@ check('theme-applied', result.ready.dark === (theme === 'dark'), `wanted ${theme
 if (args['expect-hdr'] && site === 'yt4k') check('hdr-stream', /smpte2084|pq|arib|hlg/i.test(result.ready.stats?.color || ''), `stream color ${result.ready.stats?.color || 'unknown'}, display HDR ${result.ready.env.hdr}`);
 if (cfg.quality) check('quality-reached', result.ready.h >= Number(cfg.quality.replace('hd', '')), `${result.ready.w}x${result.ready.h} wanted ${cfg.quality}`);
 
-// Settings go through chrome.storage.sync from an extension page, which the
-// content script's onChanged listener applies live, exactly like the popup.
-const extId = noExt ? null : new URL((ctx.serviceWorkers()[0] || (await ctx.waitForEvent('serviceworker', { timeout: 15000 }))).url()).host;
-const setterPage = noExt ? null : await ctx.newPage();
-if (!noExt) await setterPage.goto(`chrome-extension://${extId}/src/popup/popup.html`);
+// Settings go through chrome.storage.sync, which the content script's onChanged
+// listener applies live, exactly like the popup does. The call runs inside the
+// content script's own JS world (over CDP), so no extra tab is opened and the
+// test window never needs to be raised or focused.
+const isolated = [];
+cdp.on('Runtime.executionContextCreated', ({ context }) => { if (context.auxData?.type === 'isolated' && context.origin.startsWith('chrome-extension://')) isolated.push(context.id); });
+cdp.on('Runtime.executionContextsCleared', () => { isolated.length = 0; });
+await cdp.send('Runtime.enable');
+async function setStorage(values) {
+  for (const id of [...isolated].reverse()) {
+    const top = await cdp.send('Runtime.evaluate', { contextId: id, expression: 'window === window.top', returnByValue: true }).catch(() => null);
+    if (!top?.result?.value) continue;
+    const r = await cdp.send('Runtime.evaluate', { contextId: id, expression: `chrome.storage.sync.set(${JSON.stringify(values)}).then(() => true)`, awaitPromise: true, returnByValue: true });
+    if (r.result?.value === true) return;
+  }
+  throw new Error('could not reach the extension content script to set storage');
+}
 async function applyPreset(name) {
-  if (noExt) { await page.bringToFront(); await sleep(1000); return {}; }
-  await setterPage.evaluate((v) => chrome.storage.sync.set(v), PRESETS[name]);
-  await page.bringToFront(); // a background tab would throttle rAF and skew everything
+  if (noExt) { await sleep(1000); return {}; }
+  await setStorage(PRESETS[name]);
   await sleep(2500);
-  check(`${name}:foreground`, await foreground(), 'page visible and focused');
+  check(`${name}:visible`, await visible(), 'page is rendering (not hidden)');
   return page.evaluate(() => Object.fromEntries([...document.documentElement.style].filter((p) => p.startsWith('--lg')).map((p) => [p, document.documentElement.style.getPropertyValue(p).slice(0, 40)])));
 }
 
@@ -304,6 +315,8 @@ if (site.startsWith('yt') && withLayout && !noExt) {
 
 await applyPreset('default'); // leave the profile as we found it
 result.errs = (await lt()).errs;
+result.focusSteals = focusGuard.steals; // times the test browser took focus and the guard gave it back
+focusGuard.stop();
 check('no-page-errors', result.errs.length === 0, result.errs.slice(0, 3).join(' | '));
 result.finishedAt = new Date().toISOString();
 fs.writeFileSync(path.join(out, `result-${site}-${theme}-${label}-${round}.json`), JSON.stringify(result));
