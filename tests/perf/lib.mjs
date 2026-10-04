@@ -90,11 +90,12 @@ export const HARNESS = createHash('sha1').update(['lib.mjs', 'run.mjs'].map((f) 
 // Local, untracked customisations of a run live outside version control: a module
 // at LG_PERF_HOOKS, or tests/perf/local/hooks.mjs when present. It may export
 // `session` (a label: runs with different sessions are never compared or reused
-// as baselines) and `beforeNavigate({ ctx, site, url })`. Without one: 'anonymous'.
+// as baselines), `beforeNavigate({ ctx, site, url })` and `afterRun({ ctx, site })`
+// (called before the browser closes). Without one: 'anonymous'.
 export async function loadHooks() {
   const p = process.env.LG_PERF_HOOKS || path.join(path.dirname(fileURLToPath(import.meta.url)), 'local', 'hooks.mjs');
   const mod = fs.existsSync(p) ? await import(pathToFileURL(p).href) : {};
-  return { session: mod.session || 'anonymous', beforeNavigate: mod.beforeNavigate || (async () => {}) };
+  return { session: mod.session || 'anonymous', beforeNavigate: mod.beforeNavigate || (async () => {}), afterRun: mod.afterRun || (async () => {}) };
 }
 
 export const CHROMIUM = process.env.CHROMIUM_PATH || '/Applications/Chromium.app/Contents/MacOS/Chromium';

@@ -52,6 +52,8 @@ const chromeFlags = [
   '--autoplay-policy=no-user-gesture-required', '--mute-audio', '--disable-blink-features=AutomationControlled',
   // The window sits unfocused on its own display: keep it rendering at full rate anyway.
   '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling',
+  // No permission bubbles ("youtube.com wants to show notifications", which signed-in pages ask for): deny without asking.
+  '--deny-permission-prompts', '--disable-notifications',
 ];
 const [winX, winY] = (windowPos || '0,0').split(',').map(Number);
 let ctx, closeBrowser, page;
@@ -140,6 +142,27 @@ const nearlyIdentical = async (a, b) => {
   return d.mean <= THRESHOLDS.stillMean && d.pct <= THRESHOLDS.stillPct;
 };
 
+// Promo / prompt dialogs the site layers over the page (more of them when signed
+// in: notification nudges, Premium offers, "try this feature"). They are not ads,
+// a viewer would just close them, and left open they cover the frames we compare.
+// Closed through their own dismiss button, falling back to Escape; counted.
+let popupsDismissed = 0;
+async function dismissPopups() {
+  if (!site.startsWith('yt')) return;
+  const n = await page.evaluate(() => {
+    const open = [...document.querySelectorAll('ytd-popup-container tp-yt-paper-dialog, ytd-popup-container tp-yt-iron-dropdown, yt-mealbar-promo-renderer, ytd-mealbar-promo-renderer, tp-yt-paper-toast#toast, yt-notification-action-renderer')].filter((el) => el.offsetParent || getComputedStyle(el).display !== 'none' && el.getClientRects().length);
+    let closed = 0;
+    for (const el of open) {
+      const btn = [...el.querySelectorAll('button, yt-button-shape button, tp-yt-paper-button, #dismiss-button, [aria-label]')].find((b) => /不用了|不，謝謝|No thanks|Not now|稍後|關閉|Close|Dismiss|略過|知道了|Got it/i.test((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '')));
+      if (btn) { btn.click(); closed++; }
+    }
+    return { open: open.length, closed };
+  });
+  if (n.open > n.closed) await page.keyboard.press('Escape');
+  popupsDismissed += n.open;
+  if (n.open) await sleep(400);
+}
+
 // Wait out pre-roll ads and the age gate; returns once the episode itself plays.
 async function waitPlayable() {
   for (let i = 0; i < 60; i++) {
@@ -194,6 +217,7 @@ await page.goto(cfg.url, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector(VSEL, { state: 'attached', timeout: 30000 }).catch(() => {});
 await sleep(1500);
 check('ads-cleared', await waitPlayable(), 'waited for pre-roll ads / age gate, never blocked');
+await dismissPopups();
 if (cookieSeed && !fs.existsSync(cookieSeed)) fs.writeFileSync(cookieSeed, JSON.stringify(await ctx.cookies(cfg.url)));
 result.visitorPinned = true;
 
@@ -248,6 +272,7 @@ async function setStorage(values) {
   throw new Error('could not reach the extension content script to set storage');
 }
 async function applyPreset(name) {
+  await dismissPopups();
   if (noExt) { await sleep(1000); return {}; }
   await setStorage(PRESETS[name]);
   await sleep(1500); // the scrim eases in over 240 ms
@@ -329,6 +354,7 @@ for (const name of presetNames) {
     // retried and finally flagged unstable instead of poisoning the diff.
     for (const [i, t] of clip.stills.entries()) {
       await page.evaluate(([s, t]) => new Promise((res) => { const v = document.querySelector(s); v.pause(); v.addEventListener('seeked', () => res(), { once: true }); v.currentTime = t + 0.02; }), [VSEL, t]); // +0.02 s: the middle of a frame, so a seek can't land on either side of a boundary
+      await dismissPopups();
       await page.mouse.move(1300, 880);
       await sleep(1000); // the stability check below catches anything still moving
       let pair = null, stable = false;
@@ -402,6 +428,8 @@ if (site.startsWith('yt') && withLayout && !noExt) {
 mark('layoutAndSpa');
 await applyPreset('default'); // leave the profile as we found it
 result.errs = (await lt()).errs;
+await hooks.afterRun({ ctx, site }).catch((e) => console.warn(`afterRun hook: ${e.message}`));
+result.popupsDismissed = popupsDismissed;
 result.focusSteals = focusGuard.steals; // times the test browser took focus and the guard gave it back
 focusGuard.stop();
 check('no-page-errors', result.errs.length === 0, result.errs.slice(0, 3).join(' | '));
