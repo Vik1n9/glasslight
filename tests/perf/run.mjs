@@ -114,6 +114,8 @@ result.ready = await page.evaluate((s) => {
 }, VSEL);
 check('extension-active', result.ready.canvases === 3, `ambient canvases=${result.ready.canvases}`);
 check('theme-applied', result.ready.dark === (theme === 'dark'), `wanted ${theme}, html[dark]=${result.ready.dark}`);
+// --expect-hdr: the point of the run is the HDR path, so the stream must really be HDR.
+if (args['expect-hdr']) check('hdr-stream', /smpte2084|pq|arib|hlg/i.test(result.ready.stats?.color || ''), `stream color ${result.ready.stats?.color || 'unknown'}, display HDR ${result.ready.env.hdr}`);
 if (cfg.quality) check('quality-reached', result.ready.h >= Number(cfg.quality.replace('hd', '')), `${result.ready.w}x${result.ready.h} wanted ${cfg.quality}`);
 
 // Settings go through chrome.storage.sync from an extension page, which the

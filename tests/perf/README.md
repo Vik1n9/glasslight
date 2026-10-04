@@ -43,7 +43,9 @@ node tests/perf/compare.mjs /tmp/lg-perf
 外接螢幕，不干擾你正在用的開發頁面（或用環境變數 `LG_PERF_WINDOW`）。macOS 上
 套件啟動時會讀出該座標所在螢幕的解析度、縮放與是否 HDR，每次執行前再讀一次，
 **螢幕變了（例如解析度跑掉）就停止並提示**，不會產出不可比的數字。
-`--expect-display 1920x1080` 可要求解析度必須吻合才開測。螢幕資訊寫進每個結果，
+`--expect-display 2560x1440` 可要求解析度必須吻合才開測；`--expect-hdr` 要求該螢幕必須已開啟 HDR
+（macOS 系統設定 › 顯示器），且 4K 片實際收到的是 HDR 串流（`hdr-stream` 檢查），
+否則中止或判無效，避免「以為測了 HDR 其實是 SDR」。螢幕資訊寫進每個結果，
 新舊不一致時 `compare.mjs` 警告「數字不可比」，基準快取也隨之失效。
 視窗要保持在前景、不被遮住或最小化，否則瀏覽器會降低 rAF 頻率；每組設定都有
 `foreground` 檢查。
@@ -120,7 +122,7 @@ node tests/perf/compare.mjs /tmp/lg-perf
 取樣視窗比核心區間前面多 4 秒、後面多 3 秒，讓擴充功能在重點開始前就已進入追蹤。
 `SITES` 裡每段另有凍結畫面的媒體時間點（`stills`）。
 
-**4K 片的已知限制**：視窗所在的螢幕必須支援 HDR，YouTube 才會送 HDR 串流。
+**4K 片的已知限制**：視窗所在的螢幕必須支援並開啟 HDR，YouTube 才會送 HDR 串流。
 在不支援 HDR 的螢幕上實際收到的是 2160p60、VP9 profile 0、`bt709`（SDR），
 HDR 解碼路徑**沒有**被測到，只測到 4K60 的解碼與傳輸負載。結果裡的
 `display …HDR` 標記與串流的 `color` 欄位會註明這次到底是哪一種。

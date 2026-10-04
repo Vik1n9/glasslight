@@ -12,6 +12,7 @@
 //
 //   --window x,y        open the test window on another display (or LG_PERF_WINDOW)
 //   --expect-display WxH  refuse to run unless that display has this resolution
+//   --expect-hdr        the display must be in HDR mode and the 4K stream must really be HDR
 //   touch <out>/PAUSE   finish the current run, then stop; delete the file and rerun to resume
 //   Ctrl-C / SIGTERM    stop now, closing the browser; finished runs are kept
 import { spawn, spawnSync } from 'node:child_process';
@@ -44,6 +45,7 @@ const sig = (d) => (d ? `${d.w}x${d.h}@${d.scale}${d.hdr ? 'h' : ''}` : 'unknown
 const startDisplay = displayAt(windowPos);
 if (windowPos && !startDisplay) throw new Error(`--window ${windowPos} is not on any connected display (or displays cannot be read on this OS)`);
 if (args['expect-display'] && sig(startDisplay).split('@')[0] !== args['expect-display']) throw new Error(`test display is ${displayLabel(startDisplay)}, expected ${args['expect-display']}; fix the display resolution first`);
+if (args['expect-hdr'] && !startDisplay?.hdr) throw new Error(`--expect-hdr, but ${displayLabel(startDisplay)} is not in HDR mode: turn on High Dynamic Range for that display in System Settings > Displays`);
 const driftGuard = () => {
   if (windowPos && sig(displayAt(windowPos)) !== sig(startDisplay)) {
     console.error(`\nSTOP: the test display changed from ${displayLabel(startDisplay)} to ${displayLabel(displayAt(windowPos))}. Numbers before and after are not comparable; fix it and rerun (finished runs are kept).`);
@@ -54,7 +56,7 @@ const driftGuard = () => {
 const resultPath = (site, theme, label, round) => path.join(out, `result-${site}-${theme}-${label}-${round}.json`);
 const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 // A failed validity check means the numbers are about the test setup, not the code.
-const VALIDITY = /^(ads-cleared|extension-active|theme-applied|quality-reached)$|:(playing|preset-applied|foreground|still-stable)$/;
+const VALIDITY = /^(ads-cleared|extension-active|theme-applied|quality-reached|hdr-stream)$|:(playing|preset-applied|foreground|still-stable)$/;
 const invalid = (r) => !r || r.schema !== 2 || r.checks.some((c) => !c.ok && VALIDITY.test(c.name));
 
 function cached(site, theme, round) {
@@ -78,6 +80,7 @@ async function one(site, theme, label, ref, round) {
   const cmd = ['--site', site, '--theme', theme, '--ref', ref, '--label', label, '--round', String(round), '--presets', presets, '--out', out];
   if (mode.layout && site.startsWith('yt')) cmd.push('--layout');
   if (windowPos) cmd.push('--window', windowPos);
+  if (args['expect-hdr'] && site === 'yt4k') cmd.push('--expect-hdr');
   for (let attempt = 1; attempt <= 2; attempt++) {
     driftGuard();
     if (fs.existsSync(pauseFile(out))) { console.log(`\nPAUSE file found: stopping before ${site}/${theme}/${label}/${round}. Remove ${pauseFile(out)} and rerun to resume.`); process.exit(0); }
