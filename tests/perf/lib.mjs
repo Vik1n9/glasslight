@@ -21,6 +21,7 @@ export const SITES = {
     url: 'https://www.youtube.com/watch?v=55moNn0leAU',
     video: 'video.html5-main-video, #movie_player video',
     region: { x: 0, y: 0, width: 1010, height: 640 }, // masthead + player + the light around it; the title row below loads asynchronously and is not ours
+    stillKeepBottom: 0, // the controls auto-hide on a paused player with the mouse away: the whole video rect is video
     quality: 'hd1080', // pinned: YouTube's auto quality varies per load (480p one run, 1080p the next), which moves CPU and pixels
     clips: [{ name: 'yt-lightshow', from: 101, to: 113, stills: [103, 108, 113] }],
   },
@@ -28,6 +29,7 @@ export const SITES = {
     url: 'https://www.youtube.com/watch?v=xb-Oh2z1H88',
     video: 'video.html5-main-video, #movie_player video',
     region: { x: 0, y: 0, width: 1010, height: 640 }, // masthead + player + the light around it; the title row below loads asynchronously and is not ours
+    stillKeepBottom: 0,
     quality: 'hd2160',
     clips: [{ name: 'yt4k-heavy', from: 34, to: 46, stills: [36, 40, 44] }],
   },
@@ -35,6 +37,7 @@ export const SITES = {
     url: 'https://ani.gamer.com.tw/animeVideo.php?sn=12866',
     video: '#video-container video.vjs-tech',
     region: { x: 0, y: 0, width: 1060, height: 710 },
+    stillKeepBottom: 56, // Bahamut keeps its glass control bar over the bottom of a paused video: compare it
     clips: [
       { name: 'ani-white', from: 1036, to: 1048, stills: [1038, 1042, 1046] },
       { name: 'ani-battle', from: 1199, to: 1211, stills: [1201, 1205, 1209] },

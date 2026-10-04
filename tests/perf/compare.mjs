@@ -9,7 +9,7 @@
 // baseline's own round-to-round noise. Thresholds live in lib.mjs.
 import fs from 'node:fs';
 import path from 'node:path';
-import { CHROMIUM, THRESHOLDS as T, args, loadPlaywright } from './lib.mjs';
+import { CHROMIUM, SITES, THRESHOLDS as T, args, loadPlaywright } from './lib.mjs';
 
 const dir = process.argv[2]?.startsWith('--') ? '/tmp/lg-perf' : process.argv[2] || '/tmp/lg-perf';
 const BASE = args.base || 'base', CAND = args.cand || 'cand', OFF = args.off || null; // OFF: label of the no-extension control runs
@@ -52,17 +52,19 @@ async function pixelDiffs(pairs) {
   const { chromium } = loadPlaywright();
   const browser = await chromium.launch({ executablePath: CHROMIUM, headless: true });
   const page = await browser.newPage();
-  const payload = pairs.map(([a, b]) => [fs.readFileSync(path.join(dir, a)).toString('base64'), fs.readFileSync(path.join(dir, b)).toString('base64')]);
+  const payload = pairs.map(([a, b, mask]) => [fs.readFileSync(path.join(dir, a)).toString('base64'), fs.readFileSync(path.join(dir, b)).toString('base64'), mask || null]);
   const res = await page.evaluate(async (items) => {
     const load = (b64) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = 'data:image/png;base64,' + b64; });
     const px = (img) => { const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, c.width, c.height).data; };
     const out = [];
-    for (const [a, b] of items) {
+    for (const [a, b, m] of items) {
       const A = px(await load(a)), B = px(await load(b));
       if (A.length !== B.length) { out.push({ mean: 255, pct: 100 }); continue; }
-      let sum = 0, over = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      let sum = 0, over = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, counted = 0;
       const W = (await load(a)).width;
       for (let i = 0; i < A.length; i += 4) {
+        if (m) { const px = (i / 4) % W, py = Math.floor(i / 4 / W); if (px >= m.x && px < m.x + m.w && py >= m.y && py < m.y + m.h) continue; }
+        counted++;
         const d = (Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])) / 3;
         sum += d;
         if (d > 24) {
@@ -71,7 +73,7 @@ async function pixelDiffs(pairs) {
           if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py;
         }
       }
-      out.push({ mean: sum / (A.length / 4), pct: (100 * over) / (A.length / 4), box: over ? `${x0},${y0}–${x1},${y1}` : '' });
+      out.push({ mean: sum / Math.max(1, counted), pct: (100 * over) / Math.max(1, counted), box: over ? `${x0},${y0}–${x1},${y1}` : '' });
     }
     return out;
   }, payload);
@@ -185,6 +187,13 @@ for (const site of sites) {
 
     // frozen-frame comparison, self-calibrated by base-vs-base when two rounds exist
     if (!args['no-visual']) {
+      // The decoded video is not drawn by the extension: its pixels only add noise (HDR
+      // tone mapping that macOS retunes on the fly, seek precision, Bahamut's danmaku).
+      // Mask the video rectangle where it sat in that very shot (falling back to where it sat
+      // at load), except a bottom strip on sites whose glass control bar stays over a paused
+      // video; everything the extension draws around the player is still compared.
+      const keep = SITES[site]?.stillKeepBottom ?? 0;
+      const maskOf = (r, k) => { const st = Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills)).find((x) => x.key === k); const m = /^(-?\d+),(-?\d+) (\d+)x(\d+)$/.exec(st?.video || r.ready?.layout?.video || ''); return m ? { x: +m[1], y: +m[2], w: +m[3], h: Math.max(0, +m[4] - keep) } : null; };
       const stills = (r) => Object.fromEntries(Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills.filter((s) => s.stable !== false).map((s) => [s.key, s.file]))));
       const pairs = [], meta = [];
       for (const cr of cand) {
@@ -192,10 +201,11 @@ for (const site of sites) {
         if (!br) continue;
         const bs = stills(br), cs = stills(cr);
         for (const k of Object.keys(cs)) if (bs[k]) { pairs.push([bs[k], cs[k]]); meta.push({ k, round: cr.round, kind: 'cand' }); }
+        for (let j = pairs.length - Object.keys(cs).filter((k) => bs[k]).length; j < pairs.length; j++) pairs[j][2] = maskOf(br, meta[j].k);
       }
       if (base.length > 1) {
         const a = stills(base[0]), b2 = stills(base[1]);
-        for (const k of Object.keys(a)) if (b2[k]) { pairs.push([a[k], b2[k]]); meta.push({ k, kind: 'noise' }); }
+        for (const k of Object.keys(a)) if (b2[k]) { pairs.push([a[k], b2[k], maskOf(base[0], k)]); meta.push({ k, kind: 'noise' }); }
       }
       // stills that never settled: show where their two shots differ
       const unstable = g.flatMap((r) => Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills.filter((st) => st.pair).map((st) => ({ r, st })))));

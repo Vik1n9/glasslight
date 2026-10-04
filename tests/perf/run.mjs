@@ -298,8 +298,12 @@ for (const name of presetNames) {
     const dur = clip.to - clip.from;
     // A: CPU, nothing of ours in the page
     await withoutAds(`${name}/${clip.name}/cpu`, async () => {
-      await seek(clip.from - SETTLE);
-      await sleep(SETTLE * 1000);
+      // Coming out of the previous preset's paused stills, a 4K HDR decoder needs longer
+      // to warm up: without the extra 2 s the second preset of every run dropped 2-4
+      // frames on both builds, whichever preset it was, and the first preset none.
+      const warm = SETTLE + ((await page.evaluate((s) => document.querySelector(s).paused, VSEL)) ? 2 : 0);
+      await seek(clip.from - warm);
+      await sleep(warm * 1000);
       const m0 = await metrics(), l0 = await lt(), q0 = await quality();
       const t0 = await page.evaluate((s) => document.querySelector(s).currentTime, VSEL);
       r.sys = await measureSystem(profileDir, () => sleep(dur * 1000));
@@ -358,6 +362,9 @@ for (const name of presetNames) {
     for (const [i, t] of clip.stills.entries()) {
       await page.evaluate(([s, t]) => new Promise((res) => { const v = document.querySelector(s); v.pause(); v.addEventListener('seeked', () => res(), { once: true }); v.currentTime = t + 0.02; }), [VSEL, t]); // +0.02 s: the middle of a frame, so a seek can't land on either side of a boundary
       await dismissPopups();
+      // Pinned scroll: one run's page had scrolled the player to the very top before a still,
+      // so the frame, and where the video sat in it, no longer matched the other run's.
+      await page.evaluate(() => scrollTo(0, 0));
       await page.mouse.move(1300, 880);
       await sleep(1000); // the stability check below catches anything still moving
       let pair = null, stable = false;
@@ -370,7 +377,8 @@ for (const name of presetNames) {
       }
       const file = `still-${site}-${theme}-${name}-${clip.name}-${i}-${label}-${round}.png`;
       fs.writeFileSync(path.join(out, file), pair[1]);
-      const entry = { key: `${name}/${clip.name}/${i}@${t}s`, file, stable };
+      const vr = await page.evaluate((s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return r ? `${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}` : null; }, VSEL);
+      const entry = { key: `${name}/${clip.name}/${i}@${t}s`, file, stable, video: vr }; // where the video sat in this very shot: compare.mjs masks it
       if (!stable) { // keep both shots: compare.mjs prints where they differ
         entry.pair = [file.replace('.png', '-a.png'), file.replace('.png', '-b.png')];
         pair.forEach((buf, k) => fs.writeFileSync(path.join(out, entry.pair[k]), buf));
