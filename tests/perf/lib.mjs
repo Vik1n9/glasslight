@@ -9,8 +9,9 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Times are seconds of media time. `from`/`to` bound the measured window (the
-// clip plus a lead-in); `stills` are the exact media times frozen for the
+// Times are seconds of media time. `from`/`to` bound the measured window (12 s:
+// long enough for steady-state CPU and to cover the interesting stretch; most of a
+// run's wall time is these windows, so keep them short); `stills` are the exact media times frozen for the
 // pixel comparison. `region` is the part of the page the stills crop to: the
 // player and what the extension draws around it, not the recommendation
 // column YouTube reshuffles on every load, nor the title row under the player. README explains each pick.
@@ -20,22 +21,22 @@ export const SITES = {
     video: 'video.html5-main-video, #movie_player video',
     region: { x: 0, y: 0, width: 1010, height: 640 }, // masthead + player + the light around it; the title row below loads asynchronously and is not ours
     quality: 'hd1080', // pinned: YouTube's auto quality varies per load (480p one run, 1080p the next), which moves CPU and pixels
-    clips: [{ name: 'yt-lightshow', from: 99, to: 123, stills: [103, 111, 119] }],
+    clips: [{ name: 'yt-lightshow', from: 101, to: 113, stills: [103, 108, 113] }],
   },
   yt4k: {
     url: 'https://www.youtube.com/watch?v=xb-Oh2z1H88',
     video: 'video.html5-main-video, #movie_player video',
     region: { x: 0, y: 0, width: 1010, height: 640 }, // masthead + player + the light around it; the title row below loads asynchronously and is not ours
     quality: 'hd2160',
-    clips: [{ name: 'yt4k-heavy', from: 34, to: 58, stills: [38, 46, 54] }],
+    clips: [{ name: 'yt4k-heavy', from: 34, to: 46, stills: [36, 40, 44] }],
   },
   ani: {
     url: 'https://ani.gamer.com.tw/animeVideo.php?sn=12866',
     video: '#video-container video.vjs-tech',
     region: { x: 0, y: 0, width: 1060, height: 710 },
     clips: [
-      { name: 'ani-white', from: 1034, to: 1050, stills: [1038, 1042, 1046] },
-      { name: 'ani-battle', from: 1198, to: 1214, stills: [1201, 1205, 1209] },
+      { name: 'ani-white', from: 1036, to: 1048, stills: [1038, 1042, 1046] },
+      { name: 'ani-battle', from: 1199, to: 1211, stills: [1201, 1205, 1209] },
     ],
   },
 };
@@ -215,23 +216,56 @@ export async function measureSystem(profileDir, during, everyMs = 1000) {
 
 // ---- keep the test browser from taking the keyboard ---------------------------
 // The test window lives on its own display and must never take typing away from
-// the work on the other one. Chromium grabs app focus when it starts and when
-// tabs open; this remembers whichever app had focus and hands it back within a
-// second whenever the test browser holds it. (macOS only; elsewhere a no-op.)
+// the work on the other one. Three layers (macOS only; elsewhere no-ops):
+//  1. waitForUserIdle: a browser is only launched while the keyboard and mouse have
+//     been idle for a few seconds, because launching is the moment Chromium grabs
+//     app focus.
+//  2. --launch cdp (run.mjs): Chromium starts with no window and the test window
+//     is created in the background over CDP, which is meant not to activate the app.
+//  3. startFocusGuard: whenever the test browser still ends up in front, the app
+//     that had focus is brought back within a quarter of a second.
 const osa = (script) => new Promise((resolve) => execFile('osascript', ['-e', script], { encoding: 'utf8' }, (err, out) => resolve(err ? null : out.trim())));
+const sh = (cmd, a) => new Promise((resolve) => execFile(cmd, a, { encoding: 'utf8' }, (err, out) => resolve(err ? null : out)));
+
+/** Seconds since the last keyboard/mouse event, or null when unreadable. */
+export async function userIdleSeconds() {
+  if (process.platform !== 'darwin') return null;
+  const t = await sh('ioreg', ['-c', 'IOHIDSystem', '-d', '4']);
+  const m = t && /"HIDIdleTime" = (\d+)/.exec(t);
+  return m ? Number(m[1]) / 1e9 : null;
+}
+
+/** Block until the user has been idle for `seconds`, or `timeoutMs` passes (then go on, with a warning). */
+export async function waitForUserIdle(seconds, label = 'launch', timeoutMs = 30 * 60 * 1000) {
+  if (!seconds || process.platform !== 'darwin') return;
+  const t0 = Date.now();
+  let told = 0;
+  for (;;) {
+    const idle = await userIdleSeconds();
+    if (idle == null || idle >= seconds) return;
+    if (Date.now() - t0 > timeoutMs) { console.warn(`[idle] still no ${seconds}s of idle after ${timeoutMs / 60000} min; ${label} anyway`); return; }
+    if (Date.now() - told > 30000) { console.log(`[idle] waiting for ${seconds}s without keyboard/mouse before ${label} (idle ${idle.toFixed(1)}s)`); told = Date.now(); }
+    await sleep(700);
+  }
+}
+
 export function startFocusGuard(testApp = 'Chromium') {
   if (process.platform !== 'darwin') return { stop() {}, steals: 0 };
-  const g = { steals: 0, stop: () => { clearInterval(timer); }, busy: false };
-  let prev = null;
+  const g = { steals: 0, busy: false, stop: () => clearInterval(timer) };
+  let prevAsn = null, prevName = null;
+  const nameOf = async (asn) => /^"([^"]+)"/.exec((await sh('lsappinfo', ['info', '-only', 'name', asn])) || '')?.[1] || null;
   const tick = async () => {
     if (g.busy) return;
     g.busy = true;
-    const now = await osa('tell application "System Events" to get name of first application process whose frontmost is true');
-    if (now && now !== testApp) prev = now;
-    else if (now === testApp && prev) { await osa(`tell application "${prev}" to activate`); g.steals++; }
+    const asn = ((await sh('lsappinfo', ['front'])) || '').trim();
+    if (asn && asn !== prevAsn) {
+      const name = await nameOf(asn);
+      if (name && name !== testApp) { prevAsn = asn; prevName = await osa('tell application "System Events" to get name of first application process whose frontmost is true'); } // the process name System Events and `activate` use
+      else if (name === testApp && prevName) { await osa(`tell application "${prevName}" to activate`); g.steals++; }
+    }
     g.busy = false;
   };
-  const timer = setInterval(tick, 1000);
+  const timer = setInterval(tick, 250);
   tick();
   return g;
 }

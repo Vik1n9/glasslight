@@ -203,6 +203,10 @@ for (const site of sites) {
   }
 }
 
+if (args.timings) { // where the wall time went, to guide the next round of speed-ups
+  console.log('\n==== timings (seconds) ====');
+  console.table(Object.fromEntries(runs.filter((r) => r.timings).map((r) => [`${r.site}/${r.theme}/${r.label}/r${r.round}`, { total: (new Date(r.finishedAt) - new Date(r.startedAt)) / 1000 | 0, ...r.timings }])));
+}
 console.log('\n==== verdict ====');
 for (const v of verdicts) console.log(`${v.level.padEnd(4)} ${v.where}: ${v.msg}`);
 const fails = verdicts.filter((v) => v.level === 'FAIL').length, warns = verdicts.filter((v) => v.level === 'WARN').length;

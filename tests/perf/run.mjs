@@ -10,16 +10,19 @@
 // stills for the pixel comparison; it also records pass/fail `checks` that need
 // no baseline. Ads are never blocked or scripted away: the run waits for them
 // to finish and clicks skip once the site offers it; Bahamut's age gate gets 同意.
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { CHROMIUM, PRESETS, SITES, THRESHOLDS, args, buildExtension, displayAt, loadPlaywright, measureSystem, resolveSha, sleep, startFocusGuard } from './lib.mjs';
+import { CHROMIUM, PRESETS, SITES, THRESHOLDS, args, buildExtension, displayAt, loadPlaywright, measureSystem, resolveSha, sleep, startFocusGuard, waitForUserIdle } from './lib.mjs';
 
 const { site, ref = 'WORKTREE', label = ref, round = '1', theme = 'light', presets: presetArg = 'default', out = path.join(os.tmpdir(), 'lg-perf') } = args;
 // Where the test window opens, as "x,y" in top-left screen coordinates (e.g.
 // "-1920,0" for a display left of the main one). Keeps the run off the screen
 // you are working on; also LG_PERF_WINDOW in the environment.
 const windowPos = args.window || process.env.LG_PERF_WINDOW || '';
+const SETTLE = 2.5; // seconds of playback before a measured window starts, so the ambient light is already tracking
 const withLayout = args.layout !== undefined && args.layout !== '0';
 const cfg = SITES[site];
 if (!cfg) throw new Error('--site must be one of: ' + Object.keys(SITES).join(', '));
@@ -34,20 +37,53 @@ fs.mkdirSync(out, { recursive: true });
 const noExt = ref === 'NONE';
 const ext = noExt ? null : buildExtension(ref, path.join(out, `ext-${label}`));
 const profileDir = path.join(out, `profile-${site}-${theme}-${label}-${round}`);
+// How the test browser is started (see lib.mjs, "keep the test browser from taking
+// the keyboard"). --launch cdp starts Chromium with no window and creates the test
+// window in the background over CDP; the default, playwright, lets Playwright launch it.
+const launchMode = args.launch || 'playwright';
+await waitForUserIdle(Number(args.idle ?? 8), 'launching the test browser');
 const focusGuard = startFocusGuard();
-const ctx = await chromium.launchPersistentContext(profileDir, {
-  executablePath: CHROMIUM,
-  headless: false,
-  viewport: { width: 1440, height: 900 },
-  colorScheme: theme,
-  // Playwright forces an sRGB colour profile, which also hides the display's HDR
-  // from the page (dynamic-range: high = false) so YouTube only sends SDR. With
-  // --expect-hdr that flag is dropped for every site, keeping the pipeline identical.
-  ignoreDefaultArgs: ['--enable-automation', ...(args['expect-hdr'] ? ['--force-color-profile=srgb'] : [])],
-  args: [...(noExt ? [] : [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`]), '--autoplay-policy=no-user-gesture-required', '--mute-audio', '--disable-blink-features=AutomationControlled',
-    // The window sits unfocused on its own display: keep it rendering at full rate anyway.
-    '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', ...(windowPos ? [`--window-position=${windowPos}`] : [])],
-});
+const chromeFlags = [
+  ...(noExt ? [] : [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`]),
+  '--autoplay-policy=no-user-gesture-required', '--mute-audio', '--disable-blink-features=AutomationControlled',
+  // The window sits unfocused on its own display: keep it rendering at full rate anyway.
+  '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling',
+];
+const [winX, winY] = (windowPos || '0,0').split(',').map(Number);
+let ctx, closeBrowser, page;
+if (launchMode === 'cdp') {
+  // No Playwright launch flags here, so no forced sRGB profile: the display's HDR stays visible to the page.
+  const port = await new Promise((res) => { const srv = net.createServer(); srv.listen(0, '127.0.0.1', () => { const p = srv.address().port; srv.close(() => res(p)); }); });
+  const proc = spawn(CHROMIUM, [`--user-data-dir=${profileDir}`, `--remote-debugging-port=${port}`, '--no-startup-window', '--no-first-run', '--no-default-browser-check', ...chromeFlags], { stdio: 'ignore' });
+  let up = false;
+  for (let i = 0; i < 60 && !up; i++) { up = await fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.ok).catch(() => false); if (!up) await sleep(500); }
+  if (!up) throw new Error('Chromium did not open its debugging port');
+  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+  ctx = browser.contexts()[0];
+  const bcdp = await browser.newBrowserCDPSession();
+  const { targetId } = await bcdp.send('Target.createTarget', { url: 'about:blank', newWindow: true, background: true });
+  const { windowId } = await bcdp.send('Browser.getWindowForTarget', { targetId });
+  await bcdp.send('Browser.setWindowBounds', { windowId, bounds: { left: winX, top: winY, width: 1440, height: 1000, windowState: 'normal' } });
+  for (let i = 0; i < 40 && !page; i++) { page = ctx.pages().find((p) => p.url() === 'about:blank'); if (!page) await sleep(250); }
+  if (!page) throw new Error('the background test window never attached');
+  await page.emulateMedia({ colorScheme: theme });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  closeBrowser = async () => { await bcdp.send('Browser.close').catch(() => {}); setTimeout(() => proc.kill('SIGKILL'), 4000).unref(); };
+} else {
+  ctx = await chromium.launchPersistentContext(profileDir, {
+    executablePath: CHROMIUM,
+    headless: false,
+    viewport: { width: 1440, height: 900 },
+    colorScheme: theme,
+    // Playwright forces an sRGB colour profile, which also hides the display's HDR
+    // from the page (dynamic-range: high = false) so YouTube only sends SDR. With
+    // --expect-hdr that flag is dropped for every site, keeping the pipeline identical.
+    ignoreDefaultArgs: ['--enable-automation', ...(args['expect-hdr'] ? ['--force-color-profile=srgb'] : [])],
+    args: [...chromeFlags, ...(windowPos ? [`--window-position=${windowPos}`] : [])],
+  });
+  closeBrowser = () => ctx.close();
+  page = ctx.pages()[0] || (await ctx.newPage());
+}
 await ctx.addInitScript(() => {
   window.__lt = { n: 0, ms: 0, errs: [] };
   try {
@@ -60,8 +96,7 @@ await ctx.addInitScript(() => {
   } catch {}
   window.addEventListener('error', (e) => __lt.errs.push(String(e.message)));
 });
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { focusGuard.stop(); await ctx.close().catch(() => {}); process.exit(130); });
-const page = ctx.pages()[0] || (await ctx.newPage());
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { focusGuard.stop(); await closeBrowser().catch(() => {}); process.exit(130); });
 const cdp = await ctx.newCDPSession(page);
 await cdp.send('Performance.enable');
 const KEYS = ['TaskDuration', 'ScriptDuration', 'LayoutDuration', 'RecalcStyleDuration', 'LayoutCount', 'RecalcStyleCount'];
@@ -72,6 +107,8 @@ const quality = () => page.evaluate((s) => { const q = document.querySelector(s)
 const seek = (t) => page.evaluate(([s, t]) => { const v = document.querySelector(s); v.muted = true; v.currentTime = t; v.play().catch(() => {}); }, [VSEL, t]);
 
 const result = { schema: 2, site, theme, label, ref, sha: resolveSha(ref), round, windowPos, display: displayAt(windowPos), startedAt: new Date().toISOString(), presets: {}, checks: [] };
+const T0 = Date.now(), timings = {}; // where the wall time goes: see result.timings
+const mark = (k) => { timings[k] = +((Date.now() - T0) / 1000).toFixed(1); };
 const check = (name, ok, detail = '') => result.checks.push({ name, ok: !!ok, detail: String(detail) });
 
 // A hidden tab throttles rAF and timers, which would skew every number. Focus does
@@ -134,9 +171,9 @@ if (cfg.quality) {
 // YouTube's responsive layout can settle at different widths depending on load
 // timing. Nudge the viewport so it relays out against the final size, then wait.
 await page.setViewportSize({ width: 1439, height: 900 });
-await sleep(600);
+await sleep(400);
 await page.setViewportSize({ width: 1440, height: 900 });
-await sleep(2000);
+await sleep(1200);
 result.ready = await page.evaluate((s) => {
   const v = document.querySelector(s), p = document.getElementById('movie_player');
   let stats = null;
@@ -150,6 +187,7 @@ check('theme-applied', result.ready.dark === (theme === 'dark'), `wanted ${theme
 if (args['expect-hdr'] && site === 'yt4k') check('hdr-stream', /smpte2084|pq|arib|hlg/i.test(result.ready.stats?.color || ''), `stream color ${result.ready.stats?.color || 'unknown'}, display HDR ${result.ready.env.hdr}`);
 if (cfg.quality) check('quality-reached', result.ready.h >= Number(cfg.quality.replace('hd', '')), `${result.ready.w}x${result.ready.h} wanted ${cfg.quality}`);
 
+mark('loadedAndReady');
 // Settings go through chrome.storage.sync, which the content script's onChanged
 // listener applies live, exactly like the popup does. The call runs inside the
 // content script's own JS world (over CDP), so no extra tab is opened and the
@@ -170,7 +208,7 @@ async function setStorage(values) {
 async function applyPreset(name) {
   if (noExt) { await sleep(1000); return {}; }
   await setStorage(PRESETS[name]);
-  await sleep(2500);
+  await sleep(1500); // the scrim eases in over 240 ms
   check(`${name}:visible`, await visible(), 'page is rendering (not hidden)');
   return page.evaluate(() => Object.fromEntries([...document.documentElement.style].filter((p) => p.startsWith('--lg')).map((p) => [p, document.documentElement.style.getPropertyValue(p).slice(0, 40)])));
 }
@@ -189,8 +227,8 @@ for (const name of presetNames) {
     const r = { stills: [] };
     const dur = clip.to - clip.from;
     // A: CPU, nothing of ours in the page
-    await seek(clip.from - 4);
-    await sleep(3500);
+    await seek(clip.from - SETTLE);
+    await sleep(SETTLE * 1000);
     const m0 = await metrics(), l0 = await lt(), q0 = await quality();
     const t0 = await page.evaluate((s) => document.querySelector(s).currentTime, VSEL);
     r.sys = await measureSystem(profileDir, () => sleep(dur * 1000));
@@ -205,8 +243,8 @@ for (const name of presetNames) {
     // B: 10 Hz sampler of the extension's own canvases (#lg-ambient-canvas the
     // small ambient picture, #lg-scrim the legibility scrim alpha, #lg-glow the
     // halo) next to the source video's own luminance.
-    await seek(clip.from - 4);
-    await sleep(3500);
+    await seek(clip.from - SETTLE);
+    await sleep(SETTLE * 1000);
     await page.evaluate(([s, ms]) => {
       const v = document.querySelector(s);
       const amb = document.getElementById('lg-ambient-canvas'), scr = document.getElementById('lg-scrim'), glow = document.getElementById('lg-glow');
@@ -229,8 +267,8 @@ for (const name of presetNames) {
         window.__series.push({ vt: +v.currentTime.toFixed(2), vl: read(v), amb: read(amb), sa: read(scr, true), gl: read(glow) });
         if (performance.now() - t0 > ms) clearInterval(id);
       }, 100);
-    }, [VSEL, (dur + 4) * 1000]);
-    await sleep((dur + 4.5) * 1000);
+    }, [VSEL, (dur + 1) * 1000]);
+    await sleep((dur + 1.5) * 1000);
     r.series = await page.evaluate(() => window.__series);
     const ok = r.series.filter((p) => p.vl != null && p.amb != null);
     if (ok.length > 20 && std(ok.map((p) => p.vl)) > 3) {
@@ -266,6 +304,7 @@ for (const name of presetNames) {
     }
     preset.clips[clip.name] = r;
   }
+  mark(`preset:${name}`);
 }
 
 // ---- YouTube only, default settings: layout churn and SPA navigation --------
@@ -313,13 +352,15 @@ if (site.startsWith('yt') && withLayout && !noExt) {
   check('spa-navigation', clicked && nav.search !== before && nav.layers === 1 && nav.canvases === 3 && nav.playing, JSON.stringify({ clicked, ...nav }));
 }
 
+mark('layoutAndSpa');
 await applyPreset('default'); // leave the profile as we found it
 result.errs = (await lt()).errs;
 result.focusSteals = focusGuard.steals; // times the test browser took focus and the guard gave it back
 focusGuard.stop();
 check('no-page-errors', result.errs.length === 0, result.errs.slice(0, 3).join(' | '));
 result.finishedAt = new Date().toISOString();
+result.timings = timings; // seconds since the run began, at each stage's end
 fs.writeFileSync(path.join(out, `result-${site}-${theme}-${label}-${round}.json`), JSON.stringify(result));
 const failed = result.checks.filter((c) => !c.ok);
 console.log(`${site}/${theme}/${label}/${round}: ${result.checks.length - failed.length}/${result.checks.length} checks ok${failed.length ? ' — FAILED: ' + failed.map((c) => c.name).join(', ') : ''}`);
-await ctx.close();
+await closeBrowser();

@@ -14,6 +14,8 @@
 //   --window x,y        open the test window on another display (or LG_PERF_WINDOW)
 //   --expect-display WxH  refuse to run unless that display has this resolution
 //   --expect-hdr        the display must be in HDR mode and the 4K stream must really be HDR
+//   --launch cdp        start Chromium with no window and open the test window in the background (meant to never take focus)
+//   --idle N            only launch a browser after N seconds without keyboard/mouse (default 8, 0 = off)
 //   touch <out>/PAUSE   finish the current run, then stop; delete the file and rerun to resume
 //   Ctrl-C / SIGTERM    stop now, closing the browser; finished runs are kept
 import { spawn, spawnSync } from 'node:child_process';
@@ -25,8 +27,12 @@ import { args, displayAt, displayLabel, pauseFile, resolveSha } from './lib.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MODES = {
-  quick: { sites: 'yt', themes: 'light', presets: 'default', rounds: 1, layout: true, off: false },
-  full: { sites: 'yt,yt4k,ani', themes: 'light,dark', presets: 'default,max-glass,solid-glow', rounds: 2, layout: true, off: true },
+  // quick: the dev loop. One site, default settings, no layout churn: about 1.5 min when the baseline is cached.
+  quick: { sites: 'yt', themes: 'light', presets: 'default', rounds: 1, layout: false, off: false },
+  // full: every site, both themes, all settings in round 1; later rounds repeat only the default
+  // settings (they calibrate noise and CPU variance; the display of the extremes needs one look).
+  // Layout churn and SPA navigation run once, on YouTube light.
+  full: { sites: 'yt,yt4k,ani', themes: 'light,dark', presets: 'default,max-glass,solid-glow', laterRoundPresets: 'default', rounds: 2, layout: true, off: true },
 };
 const mode = MODES[args.mode || 'quick'];
 if (!mode) throw new Error('--mode must be quick or full');
@@ -35,6 +41,8 @@ const themes = (args.themes || mode.themes).split(',');
 const presets = args.presets || mode.presets;
 const withOff = args.off !== undefined ? args.off !== '0' : mode.off; // control runs with no extension: gives the extension's own cost
 const rounds = Number(args.rounds || mode.rounds);
+const presetsFor = (round) => (round > 1 && mode.laterRoundPresets && !args.presets ? mode.laterRoundPresets : presets);
+const layoutFor = (site, theme) => (args.layout !== undefined ? args.layout !== '0' : mode.layout) && site === 'yt' && theme === 'light';
 const out = args.out || path.join(os.tmpdir(), 'lg-perf');
 const BASE = args.base || 'HEAD';
 const CAND = args.aa ? BASE : args.cand || 'WORKTREE';
@@ -62,10 +70,11 @@ const VALIDITY = /^(ads-cleared|extension-active|theme-applied|quality-reached|h
 const invalid = (r) => !r || r.schema !== 2 || r.checks.some((c) => !c.ok && VALIDITY.test(c.name));
 
 function cached(site, theme, round, label, ref, wantPresets) {
+  // (layout is wanted only where layoutFor says so)
   const sha = resolveSha(ref);
   if (sha === 'WORKTREE' || args.aa) return false;
   const r = read(resultPath(site, theme, label, round));
-  const wantLayout = mode.layout && site.startsWith('yt') && ref !== 'NONE';
+  const wantLayout = layoutFor(site, theme) && ref !== 'NONE';
   return !!(r && r.sha === sha && (r.windowPos || '') === windowPos && sig(r.display) === sig(startDisplay) && !invalid(r) && wantPresets.split(',').every((p) => r.presets[p]) && (!wantLayout || r['theater x8']));
 }
 
@@ -79,10 +88,11 @@ const runOnce = (cmd) => new Promise((resolve) => {
   child.on('exit', (code) => { child = null; resolve(code); });
 });
 
-async function one(site, theme, label, ref, round, usePresets = presets) {
+async function one(site, theme, label, ref, round, usePresets) {
   const cmd = ['--site', site, '--theme', theme, '--ref', ref, '--label', label, '--round', String(round), '--presets', usePresets, '--out', out];
-  if (mode.layout && site.startsWith('yt') && ref !== 'NONE') cmd.push('--layout');
+  if (layoutFor(site, theme) && ref !== 'NONE') cmd.push('--layout');
   if (windowPos) cmd.push('--window', windowPos);
+  for (const k of ['launch', 'idle']) if (args[k] !== undefined) cmd.push('--' + k, args[k]);
   if (args['expect-hdr']) cmd.push('--expect-hdr'); // every site, so they share one colour pipeline; only yt4k asserts an HDR stream
   for (let attempt = 1; attempt <= 2; attempt++) {
     driftGuard();
@@ -95,15 +105,16 @@ async function one(site, theme, label, ref, round, usePresets = presets) {
   }
 }
 
-console.log(`suite: base=${BASE} (${baseSha.slice(0, 7)}) cand=${args.aa ? BASE + ' (A/A)' : CAND} sites=${sites} themes=${themes} presets=${presets} rounds=${rounds}`);
+console.log(`suite (${args.mode || 'quick'}): base=${BASE} (${baseSha.slice(0, 7)}) cand=${args.aa ? BASE + ' (A/A)' : CAND} sites=${sites} themes=${themes} presets=${presets} rounds=${rounds}`);
 console.log(`test display: ${windowPos ? displayLabel(startDisplay) : 'window placement not pinned (use --window x,y)'}`);
 for (let round = 1; round <= rounds; round++) {
+  const ps = presetsFor(round);
   for (const site of sites) {
     for (const theme of themes) {
-      if (cached(site, theme, round, 'base', BASE, presets)) console.log(`[round ${round}] ${site}/${theme}/base: cached ${baseSha.slice(0, 7)}`);
-      else { console.log(`[round ${round}] ${site}/${theme}/base`); await one(site, theme, 'base', BASE, round); }
+      if (cached(site, theme, round, 'base', BASE, ps)) console.log(`[round ${round}] ${site}/${theme}/base: cached ${baseSha.slice(0, 7)}`);
+      else { console.log(`[round ${round}] ${site}/${theme}/base`); await one(site, theme, 'base', BASE, round, ps); }
       console.log(`[round ${round}] ${site}/${theme}/cand`);
-      await one(site, theme, 'cand', CAND, round);
+      await one(site, theme, 'cand', CAND, round, ps);
       if (withOff) {
         if (cached(site, theme, round, 'off', 'NONE', 'default')) console.log(`[round ${round}] ${site}/${theme}/off: cached`);
         else { console.log(`[round ${round}] ${site}/${theme}/off (no extension)`); await one(site, theme, 'off', 'NONE', round, 'default'); }
