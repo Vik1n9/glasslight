@@ -366,11 +366,11 @@ for (const name of presetNames) {
       // so the frame, and where the video sat in it, no longer matched the other run's.
       await page.evaluate(() => scrollTo(0, 0));
       await page.mouse.move(1300, 880);
-      await sleep(1000); // the stability check below catches anything still moving
+      await sleep(1500); // the ambient glow converges slowly after a seek: 1 s once left it ~7 levels short in one run
       let pair = null, stable = false;
       for (let attempt = 0; attempt < 4 && !stable; attempt++) {
         const a = await page.screenshot({ clip: cfg.region });
-        await sleep(700);
+        await sleep(1000); // long enough for a slow drift to exceed the tolerance, not only fast fades
         const b = await page.screenshot({ clip: cfg.region });
         pair = [a, b];
         stable = a.equals(b) || (await nearlyIdentical(a, b));
