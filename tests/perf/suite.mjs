@@ -69,7 +69,7 @@ const driftGuard = () => {
 const resultPath = (site, theme, label, round) => path.join(out, `result-${site}-${theme}-${label}-${round}.json`);
 const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 // A failed validity check means the numbers are about the test setup, not the code.
-const VALIDITY = /^(ads-cleared|extension-active|theme-applied|quality-reached|hdr-stream)$|:(playing|preset-applied|visible|still-stable)$/;
+const VALIDITY = /^(ads-cleared|extension-active|theme-applied|quality-reached|hdr-stream)$|:(playing|preset-applied|visible|still-stable|ad-interrupted)$/;
 const invalid = (r) => !r || r.schema !== 2 || r.checks.some((c) => !c.ok && VALIDITY.test(c.name));
 
 function cached(site, theme, round, label, ref, wantPresets) {
