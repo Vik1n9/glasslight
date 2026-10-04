@@ -60,6 +60,7 @@ const results = [
   judge('RAM growth warns (leak hint)', { growth: 300 }, { status: 0, text: ['leak?'] }),
   judge('+20 GPU util points warns', { gpuUtil: 20 }, { status: 0, text: ['GPU busy'] }),
   judge('baseline from another harness version fails', { harness: 'h2' }, { status: 1, text: ['rerun the baseline'] }),
+  judge('RAM shrinking is not a leak', { growth: -150 }, { status: 0, text: ['\nPASS'] }),
   judge('different display warns', { display: { w: 2560, h: 1440, scale: 1, hdr: false } }, { status: 0, text: ['not comparable'] }),
 ];
 const bad = results.filter((x) => !x).length;

@@ -93,7 +93,10 @@ for (const site of sites) {
       if (dispOf(base[0]) !== dispOf(cand[0])) add('WARN', tag, `base ran on ${dispOf(base[0])}, cand on ${dispOf(cand[0])}: numbers are not comparable`);
       if ((base[0].session || 'anonymous') !== (cand[0].session || 'anonymous')) add('FAIL', tag, `base ran as ${base[0].session || 'anonymous'}, cand as ${cand[0].session || 'anonymous'}: signed-in and anonymous pages differ (ads, layout), not comparable`);
       if (base[0].harness !== cand[0].harness) add('FAIL', tag, `base was measured by harness ${base[0].harness}, cand by ${cand[0].harness}: windows, waits or samplers differ, rerun the baseline`);
-      if (base[0].ready?.layout?.video !== cand[0].ready?.layout?.video) add('FAIL', tag, `the video sat at ${base[0].ready?.layout?.video} in base but ${cand[0].ready?.layout?.video} in cand: the page laid out differently, so frames and pixels are not comparable`);
+      for (const cr of cand) { // every round: a layout can drift in one round only
+        const br = base.find((r) => r.round === cr.round);
+        if (br && br.ready?.layout?.video !== cr.ready?.layout?.video) add('FAIL', tag, `round ${cr.round}: the video sat at ${br.ready?.layout?.video} in base but ${cr.ready?.layout?.video} in cand: the page laid out differently, so frames and pixels are not comparable`);
+      }
       if (picOf(base[0]) !== picOf(cand[0])) add('WARN', tag, `base played ${picOf(base[0])}, cand ${picOf(cand[0])}: different stream, CPU and pixels are not comparable`);
     }
     // Only judge what this plan measured: a site x theme left over from another plan
@@ -150,7 +153,8 @@ for (const site of sites) {
           if (c.sys.cpuGpu - b.sys.cpuGpu > T.gpuProcCpuPts) add('WARN', where, `GPU-process CPU ${f(b.sys.cpuGpu)} → ${f(c.sys.cpuGpu)} % of a core`);
           if (b.sys.gpuUtil != null && c.sys.gpuUtil != null && c.sys.gpuUtil - b.sys.gpuUtil > T.gpuUtilPts) add('WARN', where, `GPU busy ${f(b.sys.gpuUtil)} → ${f(c.sys.gpuUtil)} % (system-wide)`);
           if (b.sys.ram && c.sys.ram / b.sys.ram > T.ramRatio) add('WARN', where, `RAM ${f(b.sys.ram)} → ${f(c.sys.ram)} MB (×${(c.sys.ram / b.sys.ram).toFixed(2)})`);
-          if (c.sys.growth - b.sys.growth > T.ramGrowthMB) add('WARN', where, `RAM grew ${f(b.sys.growth)} → ${f(c.sys.growth)} MB over the window (leak?)`);
+          // a leak hint needs RAM that grows, and grows more than the baseline's: shrinking is never a leak
+          if (c.sys.growth > T.ramGrowthMB && c.sys.growth - b.sys.growth > T.ramGrowthMB) add('WARN', where, `RAM grew ${f(b.sys.growth)} → ${f(c.sys.growth)} MB over the window (leak?)`);
           // the extension's own cost = this build minus the no-extension control on the same clip
           const offRuns = OFF ? g.filter((r) => r.label === OFF && r.presets[preset]?.clips[clip]) : [];
           if (offRuns.length) {
@@ -165,15 +169,18 @@ for (const site of sites) {
     }
 
     // layout churn + element counts (YouTube)
+    // (only rounds that ran the stage: later rounds skip it)
     for (const n of ['theater x8', 'scroll x10', 'resize x6']) {
-      if (!cand[0][n] || !base[0][n]) continue;
-      const bt = median(base.map((r) => r[n].TaskDuration)), ct = median(cand.map((r) => r[n].TaskDuration));
-      console.log(`${n.padEnd(12)} task ${f(bt)} → ${f(ct)} s   layouts ${f(median(base.map((r) => r[n].LayoutCount)))} → ${f(median(cand.map((r) => r[n].LayoutCount)))}   style recalcs ${f(median(base.map((r) => r[n].RecalcStyleCount)))} → ${f(median(cand.map((r) => r[n].RecalcStyleCount)))}`);
-      if (bt && ct / bt > Math.max(T.cpuRatio, 1 + 2 * spread(base.map((r) => r[n].TaskDuration)))) add('WARN', `${tag}/${n}`, `main-thread time ${f(bt)} → ${f(ct)} s`);
+      const bl = base.filter((r) => r[n]), cl = cand.filter((r) => r[n]);
+      if (!bl.length || !cl.length) continue;
+      const bt = median(bl.map((r) => r[n].TaskDuration)), ct = median(cl.map((r) => r[n].TaskDuration));
+      console.log(`${n.padEnd(12)} task ${f(bt)} → ${f(ct)} s   layouts ${f(median(bl.map((r) => r[n].LayoutCount)))} → ${f(median(cl.map((r) => r[n].LayoutCount)))}   style recalcs ${f(median(bl.map((r) => r[n].RecalcStyleCount)))} → ${f(median(cl.map((r) => r[n].RecalcStyleCount)))}`);
+      if (bt && ct / bt > Math.max(T.cpuRatio, 1 + 2 * spread(bl.map((r) => r[n].TaskDuration)))) add('WARN', `${tag}/${n}`, `main-thread time ${f(bt)} → ${f(ct)} s`);
     }
-    if (base[0].state && cand[0].state) {
-      console.log('element counts', JSON.stringify(base[0].state), '→', JSON.stringify(cand[0].state));
-      if (JSON.stringify(base[0].state) !== JSON.stringify(cand[0].state)) add('FAIL', tag, `element counts differ: ${JSON.stringify(base[0].state)} → ${JSON.stringify(cand[0].state)}`);
+    const bs = base.find((r) => r.state)?.state, cs = cand.find((r) => r.state)?.state;
+    if (bs && cs) {
+      console.log('element counts', JSON.stringify(bs), '→', JSON.stringify(cs));
+      if (JSON.stringify(bs) !== JSON.stringify(cs)) add('FAIL', tag, `element counts differ: ${JSON.stringify(bs)} → ${JSON.stringify(cs)}`);
     }
 
     // frozen-frame comparison, self-calibrated by base-vs-base when two rounds exist
@@ -184,7 +191,7 @@ for (const site of sites) {
         const br = base.find((r) => r.round === cr.round);
         if (!br) continue;
         const bs = stills(br), cs = stills(cr);
-        for (const k of Object.keys(cs)) if (bs[k]) { pairs.push([bs[k], cs[k]]); meta.push({ k, kind: 'cand' }); }
+        for (const k of Object.keys(cs)) if (bs[k]) { pairs.push([bs[k], cs[k]]); meta.push({ k, round: cr.round, kind: 'cand' }); }
       }
       if (base.length > 1) {
         const a = stills(base[0]), b2 = stills(base[1]);
@@ -204,8 +211,8 @@ for (const site of sites) {
         if (x.kind !== 'cand') return;
         const n = noise[x.k], tm = Math.max(T.visualMean, n ? 1.5 * n.mean : 0), tp = Math.max(T.visualPct, n ? 1.5 * n.pct : 0);
         const bad = res[i].mean > tm || res[i].pct > tp;
-        rows[x.k] = { 'mean Δ': f(res[i].mean), '% >24': f(res[i].pct), 'where x,y': res[i].box, 'noise mean Δ': n ? f(n.mean) : '-', verdict: bad ? 'DIFF' : 'same' };
-        if (bad) add('FAIL', `${tag}/${x.k}`, `frozen frame differs: mean Δ ${f(res[i].mean)} (limit ${f(tm)}), ${f(res[i].pct)}% pixels > 24 (limit ${f(tp)})`);
+        rows[`${x.k} r${x.round}`] = { 'mean Δ': f(res[i].mean), '% >24': f(res[i].pct), 'where x,y': res[i].box, 'noise mean Δ': n ? f(n.mean) : '-', verdict: bad ? 'DIFF' : 'same' };
+        if (bad) add('FAIL', `${tag}/${x.k} r${x.round}`, `frozen frame differs: mean Δ ${f(res[i].mean)} (limit ${f(tm)}), ${f(res[i].pct)}% pixels > 24 (limit ${f(tp)})`);
       });
       if (Object.keys(rows).length) { console.log('\nfrozen frames, base vs cand:'); console.table(rows); }
     }

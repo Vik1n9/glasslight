@@ -21,6 +21,7 @@
 //   --expect-display WxH  refuse to run unless that display has this resolution
 //   --expect-hdr        the display must be in HDR mode and the 4K stream must really be HDR
 //   --launch playwright  let Playwright launch the browser (default: cdp, a background window that never takes focus)
+//   --refresh-control   re-measure the stored no-extension controls instead of reusing them
 //   --idle N            only launch a browser after N seconds without keyboard/mouse (default 0 for cdp, 8 for playwright)
 //
 // Debug mode (only with --debug or --resume; never the default): every site x
@@ -38,7 +39,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HARNESS, ROOT, args, buildFingerprint, displayAt, displayLabel, loadHooks, pauseFile, resolveSha } from './lib.mjs';
+import { CHROMIUM, HARNESS, ROOT, args, buildFingerprint, displayAt, displayLabel, loadHooks, pauseFile, resolveSha } from './lib.mjs';
 import { SUITES, buildPlan, estimate, selectSuites } from './plan.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -132,6 +133,28 @@ function cached(cell, round, label, ref, presets, clips) {
   return presets.every((p) => clips.every((c) => r.presets[p]?.clips[c])) && (!wantLayout || !!r['theater x8']);
 }
 
+// How long everything took: every run (with retries) and the suite as a whole,
+// next to the estimate, so the time model in plan.mjs can be checked and tuned.
+const T_SUITE = Date.now();
+const timingLog = [];
+// ---- the no-extension control: measured once, kept, reused --------------------
+// The control measures the page without the extension, so no extension change can
+// move it. It is stored outside --out and reused by every later suite, and only
+// re-measured when what it depends on changes: the display, the session, the
+// Chromium version, or how the CPU pass measures (bump CONTROL_VERSION when
+// run.mjs's pass A or lib.mjs's measureSystem change). --refresh-control forces it.
+// The sites themselves also change over time, so the report shows the control's age.
+const CONTROL_VERSION = 1;
+const controlDir = process.env.LG_PERF_CONTROLS || path.join(os.homedir(), '.cache', 'glasslight-perf', 'controls');
+let chromiumVersion = 'unknown';
+try { chromiumVersion = execFileSync(CHROMIUM, ['--version'], { encoding: 'utf8' }).trim(); } catch {}
+const controlFile = (cell) => path.join(controlDir, [cell.site, cell.theme, sig(startDisplay), session, chromiumVersion.replace(/[^\d.]/g, ''), `v${CONTROL_VERSION}`].join('_').replace(/[^\w.+@-]/g, '-') + '.json');
+function storedControl(cell) {
+  if (args['refresh-control']) return null;
+  const r = read(controlFile(cell));
+  return r && !invalid(r) && cell.clips.every((c) => r.presets.default?.clips[c]) ? r : null;
+}
+
 let child = null;
 const stop = (code) => { child?.kill('SIGTERM'); setTimeout(() => process.exit(code), 3000).unref(); };
 process.on('SIGINT', () => stop(130));
@@ -147,15 +170,20 @@ async function one(cell, label, ref, round, presets, clips, layout) {
   if (windowPos) cmd.push('--window', windowPos);
   for (const k of ['launch', 'idle']) if (args[k] !== undefined) cmd.push('--' + k, args[k]);
   if (args['expect-hdr']) cmd.push('--expect-hdr'); // every site, so they share one colour pipeline; only yt4k asserts an HDR stream
+  const t0 = Date.now();
+  let attempts = 0;
+  const done = (ok) => timingLog.push({ cell: `${cell.site}/${cell.theme}`, label, round, attempts, ok, sec: Math.round((Date.now() - t0) / 1000) });
   for (let attempt = 1; attempt <= 2; attempt++) {
+    attempts = attempt;
     driftGuard();
     if (fs.existsSync(pauseFile(out))) { console.log(`\nPAUSE file found: stopping before ${cell.site}/${cell.theme}/${label}/${round}. Remove ${pauseFile(out)} and rerun to resume.`); process.exit(0); }
     const t = Date.now();
     const code = await runOnce(cmd);
     const r = read(resultPath(cell.site, cell.theme, label, round));
-    if (code === 0 && !retryable(r)) return console.log(`  ${((Date.now() - t) / 60000).toFixed(1)} min${invalid(r) ? ' (the build itself failed a check: not retried)' : ''}`);
+    if (code === 0 && !retryable(r)) return done(true), console.log(`  ${((Date.now() - t) / 60000).toFixed(1)} min${invalid(r) ? ' (the build itself failed a check: not retried)' : ''}`);
     console.log(`  attempt ${attempt} ${code === 0 ? 'hit an environment problem' : 'crashed'}${attempt === 1 ? ', retrying once' : ''}`);
   }
+  done(false);
 }
 
 // ---- show the plan, then run it ------------------------------------------------
@@ -180,14 +208,23 @@ const offArgs = withOff ? ['--off', 'off'] : [];
 async function measure(st, { candOnly = false } = {}) {
   const tag = `[round ${st.round}] ${key(st)}`;
   if (!candOnly) {
-    if (cached(st.cell, st.round, 'base', BASE, st.ps, st.cell.clips)) console.log(`${tag}/base: cached ${baseSha.slice(0, 7)}`);
+    if (cached(st.cell, st.round, 'base', BASE, st.ps, st.cell.clips)) { console.log(`${tag}/base: cached ${baseSha.slice(0, 7)}`); timingLog.push({ cell: key(st), label: 'base', round: st.round, cached: true, sec: 0 }); }
     else { console.log(`${tag}/base`); await one(st.cell, 'base', BASE, st.round, st.ps, st.cell.clips, st.layout); }
   }
   console.log(`${tag}/cand`);
   await one(st.cell, 'cand', CAND, st.round, st.ps, st.cell.clips, st.layout);
-  if (st.cell.off && !candOnly) {
-    if (cached(st.cell, st.round, 'off', 'NONE', ['default'], st.cell.clips)) console.log(`${tag}/off: cached`);
-    else { console.log(`${tag}/off (no extension)`); await one(st.cell, 'off', 'NONE', st.round, ['default'], st.cell.clips, false); }
+  if (st.cell.off && !candOnly && st.round === 1) { // one control per site x theme serves every round
+    const stored = storedControl(st.cell);
+    if (stored) {
+      fs.writeFileSync(resultPath(st.cell.site, st.cell.theme, 'off', 1), JSON.stringify(stored));
+      console.log(`${tag}/off: stored control, measured ${((Date.now() - new Date(stored.startedAt)) / 86400000).toFixed(0)} days ago`);
+      timingLog.push({ cell: key(st), label: 'off', round: 1, cached: true, sec: 0 });
+    } else {
+      console.log(`${tag}/off (no extension, measured once and kept)`);
+      await one(st.cell, 'off', 'NONE', 1, ['default'], st.cell.clips, false);
+      const r = read(resultPath(st.cell.site, st.cell.theme, 'off', 1));
+      if (r && !invalid(r)) { fs.mkdirSync(controlDir, { recursive: true }); fs.writeFileSync(controlFile(st.cell), JSON.stringify(r)); }
+    }
   }
 }
 
@@ -216,6 +253,17 @@ if (debug) {
   fs.rmSync(statePath, { force: true });
 }
 
+const estimated = estimate(plan, { baseCached: baseCachedEverywhere });
+const totalSec = Math.round((Date.now() - T_SUITE) / 1000);
+const sum = (f) => timingLog.filter(f).reduce((a, x) => a + x.sec, 0);
+const mins = (sec) => `${(sec / 60).toFixed(1)} min`;
+console.log(`\n==== duration ====\ntotal ${mins(totalSec)} (estimated ~${estimated.toFixed(0)} min)   base ${mins(sum((x) => x.label === 'base'))} · cand ${mins(sum((x) => x.label === 'cand'))} · control ${mins(sum((x) => x.label === 'off'))} · judging and overhead ${mins(totalSec - sum(() => true))}`);
+for (const c of [...new Set(timingLog.map((x) => x.cell))]) {
+  const rs = timingLog.filter((x) => x.cell === c);
+  console.log(`  ${c.padEnd(12)} ${mins(sum((x) => x.cell === c)).padStart(9)}   ${rs.map((x) => `${x.label}${x.round > 1 ? ' r' + x.round : ''} ${x.cached ? 'cached' : `${x.sec}s${x.attempts > 1 ? ` (${x.attempts} tries)` : ''}${x.ok === false ? ' FAILED' : ''}`}`).join(' · ')}`);
+}
+fs.writeFileSync(path.join(out, 'suite-timing.json'), JSON.stringify({ names, startedAt: new Date(T_SUITE).toISOString(), totalSec, estimatedMin: +estimated.toFixed(1), runs: timingLog }, null, 1));
+
 const expect = plan.cells.map((c) => `${c.site}/${c.theme}`).join(',');
-const c = spawnSync(process.execPath, [path.join(here, 'compare.mjs'), out, '--base', 'base', '--cand', 'cand', '--expect', expect, ...offArgs], { stdio: 'inherit' });
+const c = spawnSync(process.execPath, [path.join(here, 'compare.mjs'), out, '--base', 'base', '--cand', 'cand', '--expect', expect, '--timings', ...offArgs], { stdio: 'inherit' });
 process.exit(c.status ?? 1);

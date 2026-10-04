@@ -49,22 +49,26 @@ export const PRESETS = {
   'solid-glow': { transparency: 0, intensity: 100, contrastTarget: 1.5 }, // most opaque, brightest light, weakest legibility help
 };
 
-// A candidate fails (hard) or warns (soft) against the baseline when:
+// A candidate fails (hard) or warns (soft) against the baseline when the change is
+// beyond what identical code shows run to run. Calibrated on the full A/A of
+// 2026-10-04 (32 base/cand pairs of the same build): worst observed noise was
+// main-thread x1.20, CPU +-10.7 pts, GPU process +-7.0 pts, GPU busy +-7.4 pts,
+// RAM 0.90-1.05x, long tasks +-335 ms, dropped frames +-4, mostly on 4K.
 export const THRESHOLDS = {
-  cpuRatio: 1.1, // soft: TaskDuration may be this much higher (or 2x the baseline's own round-to-round spread)
-  longTaskMs: 150, // soft: extra long-task milliseconds
-  droppedSlack: 3, // hard: extra dropped frames allowed
+  cpuRatio: 1.25, // soft: TaskDuration may be this much higher (or 2x the baseline's own round-to-round spread)
+  longTaskMs: 400, // soft: extra long-task milliseconds
+  droppedSlack: 6, // hard: extra dropped frames allowed
   lagMs: 100, // hard: extra ambient-follow lag (the sampler resolves 100 ms)
   ambStdRatio: 0.85, // hard: ambient picture must keep this share of the baseline's swing
   visualMean: 2.0, // hard: mean per-channel pixel difference of a frozen frame (0-255)
   visualPct: 3.0, // hard: % of pixels differing by more than 24
-  sysCpuPts: 8, // soft: extra CPU, in points of one core, beyond the baseline's own spread
-  gpuProcCpuPts: 5, // soft: extra GPU-process CPU points
+  sysCpuPts: 12, // soft: extra CPU, in points of one core, beyond the baseline's own spread
+  gpuProcCpuPts: 8, // soft: extra GPU-process CPU points
   gpuUtilPts: 10, // soft: extra system-wide GPU busy % (noisy: the whole machine)
   ramRatio: 1.15, // soft: renderer+GPU+browser RAM may be this much higher
   ramGrowthMB: 80, // soft: extra RAM growth over the window (leak hint)
   overheadPts: 5, // soft: the extension's own CPU cost (cand minus no-extension control) may exceed the baseline's by this many points
-  stillMean: 0.02, // a frame counts as settled when two shots 700 ms apart differ by at most this mean level...
+  stillMean: 0.25, // (HDR + backdrop blur dithers: settled frames still differ by 1-5 levels over ~10% of pixels, mean up to ~0.14) // a frame counts as settled when two shots 700 ms apart differ by at most this mean level...
   stillPct: 0.02, // ...and at most this % of pixels moved more than 8 levels
   followCorr: 0.4, // hard (absolute): video-vs-ambient correlation, when the clip has enough swing
 };

@@ -54,6 +54,9 @@ const chromeFlags = [
   '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling',
   // No permission bubbles ("youtube.com wants to show notifications", which signed-in pages ask for): deny without asking.
   '--deny-permission-prompts', '--disable-notifications',
+  // Scrollbars that take space (a mouse is attached) come and go with the page length and
+  // shift the whole layout by their width: one run's player was 1051 px wide, the next 1040.
+  '--hide-scrollbars',
 ];
 const [winX, winY] = (windowPos || '0,0').split(',').map(Number);
 let ctx, closeBrowser, page;
@@ -399,7 +402,7 @@ if (site.startsWith('yt') && withLayout && !noExt) {
     lgClear: document.querySelectorAll('.lg-clear').length,
     refractFilters: document.querySelectorAll('filter[id^="lg-refract"]').length,
     refractMaps: [...document.querySelectorAll('filter[id^="lg-refract"] feImage')].filter((i) => (i.getAttribute('href') || '').startsWith('data:')).length,
-    canvases: document.querySelectorAll('canvas').length,
+    canvases: document.querySelectorAll('#lg-ambient canvas').length, // ours only: YouTube adds canvases of its own now and then
   }));
   check('refract-maps-set', result.state.refractFilters > 0 && result.state.refractMaps === result.state.refractFilters, JSON.stringify(result.state));
 

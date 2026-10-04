@@ -151,7 +151,7 @@ export function estimate(plan, { baseCached = false } = {}) {
       if (!ps.length) continue;
       const one = LOAD[c.site] + ps.length * c.clips.length * PRESET_CLIP + (c.layout && round === 1 ? LAYOUT : 0);
       sec += one * (baseCached ? 1 : 2);
-      if (c.off && !baseCached) sec += LOAD[c.site] + c.clips.length * CONTROL_CLIP;
+      if (c.off && !baseCached && round === 1) sec += LOAD[c.site] + c.clips.length * CONTROL_CLIP; // measured once and kept (suite.mjs)
     }
   }
   return sec / 60;
