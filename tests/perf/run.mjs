@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { CHROMIUM, HARNESS, PRESETS, SITES, THRESHOLDS, args, buildExtension, buildFingerprint, displayAt, loadPlaywright, measureSystem, resolveSha, sleep, startFocusGuard, waitForUserIdle } from './lib.mjs';
+import { CHROMIUM, HARNESS, PRESETS, SITES, THRESHOLDS, args, buildExtension, buildFingerprint, displayAt, loadHooks, loadPlaywright, measureSystem, resolveSha, sleep, startFocusGuard, waitForUserIdle } from './lib.mjs';
 
 const { site, ref = 'WORKTREE', label = ref, round = '1', theme = 'light', presets: presetArg = 'default', out = path.join(os.tmpdir(), 'lg-perf') } = args;
 // Where the test window opens, as "x,y" in top-left screen coordinates (e.g.
@@ -183,13 +183,18 @@ async function withoutAds(name, pass) {
 // next 926x521, same code), which moves every frame. The first run of a site in an
 // --out directory saves its cookies; every later run (base, cand, control) starts
 // with them, so all of them sit in the same bucket.
-const cookieSeed = path.join(out, `cookies-${new URL(cfg.url).hostname}.json`);
-if (fs.existsSync(cookieSeed)) await ctx.addCookies(JSON.parse(fs.readFileSync(cookieSeed, 'utf8')));
+// A local session hook (see lib.mjs loadHooks) replaces the pinned visitor; its
+// cookies are never written into --out.
+const hooks = await loadHooks();
+result.session = hooks.session;
+await hooks.beforeNavigate({ ctx, site, url: cfg.url });
+const cookieSeed = hooks.session === 'anonymous' ? path.join(out, `cookies-${new URL(cfg.url).hostname}.json`) : null;
+if (cookieSeed && fs.existsSync(cookieSeed)) await ctx.addCookies(JSON.parse(fs.readFileSync(cookieSeed, 'utf8')));
 await page.goto(cfg.url, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector(VSEL, { state: 'attached', timeout: 30000 }).catch(() => {});
 await sleep(1500);
 check('ads-cleared', await waitPlayable(), 'waited for pre-roll ads / age gate, never blocked');
-if (!fs.existsSync(cookieSeed)) fs.writeFileSync(cookieSeed, JSON.stringify(await ctx.cookies(cfg.url)));
+if (cookieSeed && !fs.existsSync(cookieSeed)) fs.writeFileSync(cookieSeed, JSON.stringify(await ctx.cookies(cfg.url)));
 result.visitorPinned = true;
 
 // Site theme. YouTube follows the emulated colour scheme from page load; the

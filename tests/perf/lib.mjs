@@ -5,7 +5,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -86,6 +86,16 @@ export function loadPlaywright() {
 // windows, waits or samplers) are not comparable, so the baseline cache and
 // compare.mjs both key on it.
 export const HARNESS = createHash('sha1').update(['lib.mjs', 'run.mjs'].map((f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), f), 'utf8')).join('\0')).digest('hex').slice(0, 10);
+
+// Local, untracked customisations of a run live outside version control: a module
+// at LG_PERF_HOOKS, or tests/perf/local/hooks.mjs when present. It may export
+// `session` (a label: runs with different sessions are never compared or reused
+// as baselines) and `beforeNavigate({ ctx, site, url })`. Without one: 'anonymous'.
+export async function loadHooks() {
+  const p = process.env.LG_PERF_HOOKS || path.join(path.dirname(fileURLToPath(import.meta.url)), 'local', 'hooks.mjs');
+  const mod = fs.existsSync(p) ? await import(pathToFileURL(p).href) : {};
+  return { session: mod.session || 'anonymous', beforeNavigate: mod.beforeNavigate || (async () => {}) };
+}
 
 export const CHROMIUM = process.env.CHROMIUM_PATH || '/Applications/Chromium.app/Contents/MacOS/Chromium';
 

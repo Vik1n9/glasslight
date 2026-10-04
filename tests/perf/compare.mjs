@@ -91,6 +91,7 @@ for (const site of sites) {
     const picOf = (r) => `${r.ready?.w}x${r.ready?.h} ${String(r.ready?.stats?.codecs || '').split(' ')[0]}`;
     if (base.length && cand.length) {
       if (dispOf(base[0]) !== dispOf(cand[0])) add('WARN', tag, `base ran on ${dispOf(base[0])}, cand on ${dispOf(cand[0])}: numbers are not comparable`);
+      if ((base[0].session || 'anonymous') !== (cand[0].session || 'anonymous')) add('FAIL', tag, `base ran as ${base[0].session || 'anonymous'}, cand as ${cand[0].session || 'anonymous'}: signed-in and anonymous pages differ (ads, layout), not comparable`);
       if (base[0].harness !== cand[0].harness) add('FAIL', tag, `base was measured by harness ${base[0].harness}, cand by ${cand[0].harness}: windows, waits or samplers differ, rerun the baseline`);
       if (base[0].ready?.layout?.video !== cand[0].ready?.layout?.video) add('FAIL', tag, `the video sat at ${base[0].ready?.layout?.video} in base but ${cand[0].ready?.layout?.video} in cand: the page laid out differently, so frames and pixels are not comparable`);
       if (picOf(base[0]) !== picOf(cand[0])) add('WARN', tag, `base played ${picOf(base[0])}, cand ${picOf(cand[0])}: different stream, CPU and pixels are not comparable`);

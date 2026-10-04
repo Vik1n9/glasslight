@@ -71,6 +71,10 @@ node tests/perf/compare.mjs /tmp/lg-perf --timings
   凍結畫面不穩定）會整次重試一次；數字只在有效的執行上比較。
 - 每次執行結束會等 Chromium 確實關閉（不留孤兒程序吃 CPU），並刪掉約 70 MB 的設定檔目錄；
   要保留除錯用 `--keep-profile`。
+- **本機掛鉤**：不進版控的本機自訂（例如某次執行要帶的瀏覽器狀態）放在 `LG_PERF_HOOKS` 指向的模組，
+  或 `tests/perf/local/hooks.mjs`（請用 `.git/info/exclude` 排除，只存在本機）。它可匯出 `session`（標籤）
+  與 `beforeNavigate({ ctx, site, url })`。不同 `session` 的結果不會互比、也不會沿用為基準；
+  有掛鉤時不寫入固定訪客的 cookie。沒有掛鉤時一律是 `anonymous`。
 - 只能用 Chromium：品牌版 Chrome 會忽略 `--load-extension`。
 - `--sites yt,yt4k,ani`、`--themes light,dark`、`--presets …`、`--rounds N` 可個別覆寫。
 - **不可封鎖或腳本移除廣告。** 未登入時兩站都有廣告：腳本一律等廣告播完、跳過鈕出現後再點跳過；

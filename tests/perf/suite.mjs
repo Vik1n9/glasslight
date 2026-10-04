@@ -38,7 +38,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HARNESS, ROOT, args, buildFingerprint, displayAt, displayLabel, pauseFile, resolveSha } from './lib.mjs';
+import { HARNESS, ROOT, args, buildFingerprint, displayAt, displayLabel, loadHooks, pauseFile, resolveSha } from './lib.mjs';
 import { SUITES, buildPlan, estimate, selectSuites } from './plan.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -56,6 +56,7 @@ const BASE = args.base || 'HEAD';
 const CAND = args.aa ? BASE : args.cand || 'WORKTREE';
 const windowPos = args.window || process.env.LG_PERF_WINDOW || '';
 const baseSha = resolveSha(BASE);
+const { session } = await loadHooks(); // 'anonymous' unless a local hook says otherwise
 
 // ---- --list: the menu -----------------------------------------------------------
 if (args.list) {
@@ -126,7 +127,7 @@ function cached(cell, round, label, ref, presets, clips) {
   const sha = resolveSha(ref);
   if (sha === 'WORKTREE' || args.aa) return false;
   const r = read(resultPath(cell.site, cell.theme, label, round));
-  if (!r || r.sha !== sha || r.harness !== HARNESS || (r.windowPos || '') !== windowPos || sig(r.display) !== sig(startDisplay) || invalid(r)) return false;
+  if (!r || r.sha !== sha || r.harness !== HARNESS || (r.session || 'anonymous') !== session || (r.windowPos || '') !== windowPos || sig(r.display) !== sig(startDisplay) || invalid(r)) return false;
   const wantLayout = cell.layout && round === 1 && ref !== 'NONE';
   return presets.every((p) => clips.every((c) => r.presets[p]?.clips[c])) && (!wantLayout || !!r['theater x8']);
 }
@@ -162,7 +163,7 @@ const baseCachedEverywhere = plan.cells.every((c) => cached(c, 1, 'base', BASE, 
 console.log(`\nsuites: ${names.join(', ')}   harness ${HARNESS}   base=${BASE} (${baseSha.slice(0, 7)}) cand=${args.aa ? BASE + ' (A/A)' : CAND}`);
 for (const c of plan.cells) console.log(`  ${`${c.site}/${c.theme}`.padEnd(12)} presets ${c.presets.join(',')}  clips ${c.clips.join(',')}${c.layout ? '  +layout/SPA' : ''}${c.off ? '  +control' : ''}`);
 console.log(`  rounds ${plan.rounds}; estimated ~${estimate(plan, { baseCached: baseCachedEverywhere }).toFixed(0)} min${baseCachedEverywhere ? ' (baseline cached)' : ''}`);
-console.log(`test display: ${windowPos ? displayLabel(startDisplay) : 'window placement not pinned (use --window x,y)'}\n`);
+console.log(`test display: ${windowPos ? displayLabel(startDisplay) : 'window placement not pinned (use --window x,y)'}   session: ${session}\n`);
 if (args.dry) process.exit(0); // --dry: show the plan and the estimate, run nothing
 fs.writeFileSync(path.join(out, 'plan.json'), JSON.stringify({ names, base: BASE, cand: CAND, harness: HARNESS, ...plan, presetsFor: undefined }, null, 1));
 
