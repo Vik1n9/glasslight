@@ -257,7 +257,7 @@ const estimated = estimate(plan, { baseCached: baseCachedEverywhere });
 const totalSec = Math.round((Date.now() - T_SUITE) / 1000);
 const sum = (f) => timingLog.filter(f).reduce((a, x) => a + x.sec, 0);
 const mins = (sec) => `${(sec / 60).toFixed(1)} min`;
-console.log(`\n==== duration ====\ntotal ${mins(totalSec)} (estimated ~${estimated.toFixed(0)} min)   base ${mins(sum((x) => x.label === 'base'))} · cand ${mins(sum((x) => x.label === 'cand'))} · control ${mins(sum((x) => x.label === 'off'))} · judging and overhead ${mins(totalSec - sum(() => true))}`);
+console.log(`\n==== duration ====\ntotal ${mins(totalSec)} (estimated ~${estimated.toFixed(0)} min)   base ${mins(sum((x) => x.label === 'base'))} · cand ${mins(sum((x) => x.label === 'cand'))} · control ${mins(sum((x) => x.label === 'off'))} · judging and overhead ${mins(Math.max(0, totalSec - sum(() => true)))}`);
 for (const c of [...new Set(timingLog.map((x) => x.cell))]) {
   const rs = timingLog.filter((x) => x.cell === c);
   console.log(`  ${c.padEnd(12)} ${mins(sum((x) => x.cell === c)).padStart(9)}   ${rs.map((x) => `${x.label}${x.round > 1 ? ' r' + x.round : ''} ${x.cached ? 'cached' : `${x.sec}s${x.attempts > 1 ? ` (${x.attempts} tries)` : ''}${x.ok === false ? ' FAILED' : ''}`}`).join(' · ')}`);

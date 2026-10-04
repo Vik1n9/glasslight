@@ -138,10 +138,11 @@ export function buildPlan(names) {
   };
 }
 
-// Wall-time model, from measured runs (run.mjs timings): page load + ads per
-// run, one preset x clip (apply, CPU pass, response pass, three stills), one
-// control clip (CPU pass only), the layout/SPA stage.
-const LOAD = { yt: 25, yt4k: 45, ani: 45 }, PRESET_CLIP = 42, CONTROL_CLIP = 16, LAYOUT = 55;
+// Wall-time model, fitted to the full A/A of 2026-10-04 (signed in, 53.5 min for
+// the full suite): page load per run, one preset x clip (apply, CPU pass, response
+// pass, three stills), one control clip (CPU pass only), the layout/SPA stage.
+// Anonymous runs wait for ads: add ~35 s per 動畫瘋 run.
+const LOAD = { yt: 20, yt4k: 20, ani: 15 }, PRESET_CLIP = 38, CONTROL_CLIP = 16, LAYOUT = 50;
 /** Estimated minutes for a plan; baseCached = the baseline (and controls) are already measured. */
 export function estimate(plan, { baseCached = false } = {}) {
   let sec = 0;

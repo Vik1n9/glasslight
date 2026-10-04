@@ -66,7 +66,7 @@ export const THRESHOLDS = {
   gpuProcCpuPts: 8, // soft: extra GPU-process CPU points
   gpuUtilPts: 10, // soft: extra system-wide GPU busy % (noisy: the whole machine)
   ramRatio: 1.15, // soft: renderer+GPU+browser RAM may be this much higher
-  ramGrowthMB: 80, // soft: extra RAM growth over the window (leak hint)
+  ramGrowthMB: 150, // soft: extra RAM growth over the window (leak hint); the second full A/A saw +85 MB on identical code
   overheadPts: 5, // soft: the extension's own CPU cost (cand minus no-extension control) may exceed the baseline's by this many points
   stillMean: 0.25, // (HDR + backdrop blur dithers: settled frames still differ by 1-5 levels over ~10% of pixels, mean up to ~0.14) // a frame counts as settled when two shots 700 ms apart differ by at most this mean level...
   stillPct: 0.02, // ...and at most this % of pixels moved more than 8 levels
