@@ -164,11 +164,14 @@
   //  - past the box, radial light: every pixel takes the colour of the
   //    frame's outermost band where its ray leaves the box, spread along that
   //    edge more and more with distance.
-  // Burned-in subtitles (動畫瘋, many YouTube uploads) sit ~10-25 % above the
-  // frame's bottom edge. The radial light never reaches further into the frame
-  // than its outer band, and straight under the player — where the enlarged
-  // frame would put the subtitle line right over the title — the box shows
-  // the frame's bottom band (below the subtitles) stretched down instead.
+  // Straight under the player — where the enlarged frame would put the
+  // subtitle line right over the title — the box shows a reflection of the
+  // picture instead: mirrored at its bottom edge, dimmer than the player,
+  // blurring and fading with distance into the frame's bottom row, which is
+  // where the radial light past the box starts from. Burned-in subtitles
+  // (動畫瘋, many YouTube uploads; ~10-25 % above the bottom edge) land in
+  // the reflection upside down and blurred. The radial light never reaches
+  // further into the frame than its outer band.
   // A per-pixel mapping needs a shader; without WebGL the backdrop falls back
   // to the enlarged frame.
   const radial = (() => {
@@ -194,12 +197,14 @@
       uniform vec4 box; // enlarged frame's edges in picture halves: left, top, right, bottom
       uniform float reach; // box-relative t at the canvas edge
       uniform bool hybrid; // false: plain radial extension
+      uniform float aspect; // picture width / height, in screen px
       varying vec2 uv;
       const int TAPS = ${TAPS_JS};
       const float BAND = 0.06; // how far inside the edge the light is taken from
-      // Bottom band stretched under the player. Subtitles can sit low: on a
-      // YouTube upload measured live they reached 96 % of the way down.
-      const float SUB = 0.025;
+      // Reflection under the player: brightness against the player's, and
+      // length in picture half-widths, so a portrait Short gets a short one.
+      const float DIM = 0.72;
+      const float REFL = 0.6;
       void main() {
         vec2 d = (uv - rect.xy) / rect.zw; // ±1 on the picture's edges
         if (!hybrid) {
@@ -227,12 +232,31 @@
         vec2 n = d / k;
         float t = max(abs(n.x), abs(n.y));
         if (t <= 1.0) {
-          // Straight under the player the frame's bottom band, stretched from
-          // the player's edge to the box's; eased in across its corners.
+          vec3 frame = texture2DLodEXT(tex, n * 0.5 + 0.5, 0.0).rgb;
+          // Straight under the player the reflection, eased in across its
+          // corners; colours are blended, not coordinates, so nothing smears.
           float under = smoothstep(0.98, 1.0, d.y) * (1.0 - smoothstep(0.8, 1.2, abs(d.x)));
-          float band = 1.0 - SUB * (1.0 - clamp((d.y - 1.0) / max(k.y - 1.0, 0.001), 0.0, 1.0));
-          vec2 s = vec2(n.x, mix(n.y, band, under));
-          gl_FragColor = vec4(texture2DLodEXT(tex, s * 0.5 + 0.5, 0.0).rgb, 1.0);
+          if (under <= 0.0) {
+            gl_FragColor = vec4(frame, 1.0);
+            return;
+          }
+          // Mirrored in picture space (axis d.y = 1), aligned with the player
+          // above it: the box's n would scale it by k and bend the shape.
+          float g = clamp((d.y - 1.0) / max(min(k.y - 1.0, REFL * aspect), 0.001), 0.0, 1.0);
+          float h = clamp((d.y - 1.0) / max(k.y - 1.0, 0.001), 0.0, 1.0);
+          vec2 m = clamp(vec2(d.x, 2.0 - d.y), -1.0, 1.0);
+          vec3 refl = texture2DLodEXT(tex, m * 0.5 + 0.5, mix(2.0, 4.0, g)).rgb;
+          // What the radial light starts from at the box's bottom edge: the
+          // frame's bottom row at n.x, sharp only where it meets the light.
+          vec3 tail = texture2DLodEXT(tex, vec2(n.x, 1.0) * 0.5 + 0.5, 2.5 * (1.0 - h)).rgb;
+          vec3 c = mix(tail, refl, (1.0 - g) * (1.0 - g));
+          // Dimmer than the player across the title, back to full brightness
+          // at the box's edge so the light past it has no seam.
+          c *= mix(DIM, 1.0, smoothstep(0.5, 1.0, h));
+          // Across the corners the frame keeps clear of the subtitle line: it
+          // slides to its bottom row as the reflection takes over.
+          vec3 side = texture2DLodEXT(tex, vec2(n.x, mix(n.y, 1.0, under)) * 0.5 + 0.5, 0.0).rgb;
+          gl_FragColor = vec4(mix(side, c, under), 1.0);
           return;
         }
         vec2 e = n / t; // unit ray (Chebyshev): where it leaves the box
@@ -261,6 +285,7 @@
     let boxLoc;
     let reachLoc;
     let hybridLoc;
+    let aspectLoc;
     let src;
     let sctx2;
     let failed = false;
@@ -300,6 +325,7 @@
       boxLoc = gl.getUniformLocation(prog, 'box');
       reachLoc = gl.getUniformLocation(prog, 'reach');
       hybridLoc = gl.getUniformLocation(prog, 'hybrid');
+      aspectLoc = gl.getUniformLocation(prog, 'aspect');
       src = new OffscreenCanvas(SRC, SRC);
       sctx2 = src.getContext('2d');
       sctx2.imageSmoothingQuality = 'medium';
@@ -335,6 +361,7 @@
       gl.uniform4f(boxLoc, ...zone.box);
       gl.uniform1f(reachLoc, zone.reach);
       gl.uniform1i(hybridLoc, hybrid ? 1 : 0);
+      gl.uniform1f(aspectLoc, zone.aspect);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       return true;
     }
@@ -459,7 +486,8 @@
         reach = Math.max(reach, Math.abs(dx) / (dx < 0 ? box[0] : box[2]), Math.abs(dy) / (dy < 0 ? box[1] : box[3]));
       }
     }
-    return { box, reach };
+    // The picture's shape on screen, for the reflection's length.
+    return { box, reach, aspect: (hw * viewW) / (hh * viewH) };
   }
 
   // The drift would slide the backdrop out of line with the player.
