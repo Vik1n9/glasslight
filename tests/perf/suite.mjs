@@ -114,6 +114,10 @@ const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } cat
 // A failed validity check means the numbers are about the test setup, not the code.
 const VALIDITY = /^(ads-cleared|extension-active|theme-applied|quality-reached|hdr-stream)$|:(playing|preset-applied|visible|still-stable|ad-interrupted)$/;
 const invalid = (r) => !r || r.schema !== 2 || r.checks.some((c) => !c.ok && VALIDITY.test(c.name));
+// Of those, the ones the environment causes (ads, stream quality, rendering): worth one more try.
+// A build that does not start or ignores the settings fails the same way twice, so it is not retried.
+const RETRYABLE = /^(ads-cleared|theme-applied|quality-reached|hdr-stream)$|:(playing|visible|still-stable|ad-interrupted)$/;
+const retryable = (r) => !r || r.schema !== 2 || r.checks.some((c) => !c.ok && RETRYABLE.test(c.name));
 
 // A stored run can stand in when it measured the same build with the same harness
 // on the same display, and covered at least the presets, clips and stages wanted
@@ -148,8 +152,8 @@ async function one(cell, label, ref, round, presets, clips, layout) {
     const t = Date.now();
     const code = await runOnce(cmd);
     const r = read(resultPath(cell.site, cell.theme, label, round));
-    if (code === 0 && !invalid(r)) return console.log(`  ${((Date.now() - t) / 60000).toFixed(1)} min`);
-    console.log(`  attempt ${attempt} ${code === 0 ? 'had invalid checks' : 'crashed'}${attempt === 1 ? ', retrying once' : ''}`);
+    if (code === 0 && !retryable(r)) return console.log(`  ${((Date.now() - t) / 60000).toFixed(1)} min${invalid(r) ? ' (the build itself failed a check: not retried)' : ''}`);
+    console.log(`  attempt ${attempt} ${code === 0 ? 'hit an environment problem' : 'crashed'}${attempt === 1 ? ', retrying once' : ''}`);
   }
 }
 
