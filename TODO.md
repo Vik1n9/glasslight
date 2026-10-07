@@ -4,7 +4,7 @@
 1.1.0 合併發佈，其紀錄保留在本檔前半部供日後回查；**進行中的計畫是下方三節**：
 
 1. 影片下方的延伸：拉伸 → 倒影（已實作，待真實網站驗收）
-2. 靜態模式（Static backdrop）
+2. 靜態模式（Static backdrop）（已實作，待真實網站驗收）
 3. 設定頁（options page）＋抖內按鈕
 
 ---
@@ -124,102 +124,110 @@
 
 ## 靜態模式（Static backdrop）
 
-狀態：2026-10-04 規劃中（尚未實作）
+狀態：2026-10-07 已實作（分支 `feat/reflection`），headless 功能測試通過，**待真實網站驗收**。
 
 ### 目標
 
-目前的環境光每幀重繪，系統開銷大（筆電耗電、低階裝置可能跑不動）。新增一個
-**靜態模式**：只在切換頁面／載入時取一次畫面作為背景，之後完全不重繪。玻璃質感
-與透明度效果保留，只是不再跟著影片動。
+環境光每幀重繪，開銷大（筆電耗電、低階裝置可能跑不動）。靜態模式：只在影片載入、
+暫停、跳轉時取一個畫面當背景，之後不重繪。玻璃質感與透明度效果保留，只是不跟著影片動。
 
-### 現況：開銷在哪裡
+### 實作（`src/content/ambient.js`）
 
-- `ambient.js:629-649` `onFrame()` / `schedule()`：`requestVideoFrameCallback`
-  迴圈，每幀 `drawVideo()`。幀率由 `fps()`（`ambient.js:76`）決定，30 fps，
-  `performance` 開啟時 15 fps。
-- `glass.css:151-154` `@keyframes lg-drift`：全視窗漂移動畫，跑的時候每幀重繪
-  全視窗模糊層與其上每個玻璃表面。**但注意現況範圍**：預設 hybrid backdrop
-  播放中已有 `lg-radial` 把它關掉（`glass.css:147-149` `animation: none`）、
-  沒播放時 `lg-still` 也會 pause（`glass.css:141-143`）；漂移實際只在
-  「enlarged backdrop＋播放中」跑。靜態模式**強制 `lg-still` 即可涵蓋全部
-  情況，不需新增 class 或 CSS**。
-- `tick()` 每 `STATS_MS = 250` ms（`ambient.js:27`）跑一次，做 GPU readback
-  ＋ scrim solve。已有 `sampleDirty` / `settled` 提前返回（`ambient.js:981-984`），
-  收斂後只剩 `placeGlow()`，應接近零成本——但要實測確認。
-- `analyseRawFrame()`（letterbox 裁切／DRM 偵測）：`tick()` 的提前返回讓它
-  收斂後自然不再週期執行，不需特別處理；但靜態模式的一發截圖用的是當下的
-  `crop`，新載入頁面時還是預設 `{0,0,1,1}`，**擷取當下必須先跑一次**，
-  否則黑邊會被烘進色盤。DRM 全黑偵測迴圈可跳過。
-- 已存在的現成零件：`drawStill()`（`ambient.js:810-822`，「單張圖 → 模糊 →
-  拉滿視窗」）與 `showPixels()`（`ambient.js:792-808`，淡入到 `drawStill`）
-  ——**但這兩者是縮圖退路，不是靜態模式的主路徑**（理由見預計修改 3）。
-  `onBlocked` → `LG.thumbs.showVideo(videoId())`（`main.js:65`）已經是
-  drawImage 失敗時的退路，靜態模式直接沿用。
+- 設定 `static: false`（`settings.js`、`popup.js` 的 `DEFAULTS`；popup 加一個
+  toggle，滑過顯示說明，6 語系 `optStatic` / `optStaticHint`）。
+- **沒有影格迴圈**：`schedule()` 在靜態模式直接 return，涵蓋所有呼叫點；開啟時
+  `cancel()` 掉進行中的 `requestVideoFrameCallback`。
+- **漂移**：`syncMotion()` 在靜態模式強制 `lg-still`，未新增 class 或 CSS。
+- **擷取時機**：`loadeddata`（含 SPA 導頁換片）、`pause`、`seeked`、綁定新的
+  `<video>`、開啟靜態模式當下。事件只標記 `shotWanted`，實際擷取在下一次
+  `tick()`（≤ 250 ms）。沒有週期性重取。
+- **擷取流程 `takeShot()`**：
+  1. 先跑 `analyseRawFrame()`（letterbox 裁切、DRM 計數）→ 黑邊不會烘進背景。
+  2. **規劃沒寫到的問題：影片開頭常是全黑**。播放中若整格是黑的就等下一次再試
+     （每 2 個 tick 一次，維持既有 DRM 偵測的 8 秒門檻 → 之後沿用
+     `onBlocked` → 縮圖退路）。暫停在黑畫面就照實顯示，但 `playing` 時再重取
+     一次：影片載入完、autoplay 還沒開始時正是「暫停在黑色第一格」。
+  3. 把畫面複製成一張**快照**（`OffscreenCanvas`，寬 ≤ 640 px，保留比例）。
+  4. 從快照畫 backdrop（`drawVideo(1)`，hybrid／radial／enlarged、glow、scrim
+     取樣全部同一路徑）。同時取消進行中的縮圖淡入（`fadeRaf`），否則淡入的最後
+     一格會蓋掉快照——動態模式靠下一幀蓋回去，靜態模式沒有下一幀。
+- **規劃沒寫到的問題：重新對位必須從快照畫**。原規劃是捲動停止後 `drawVideo(1)`，
+  但那會畫出*當下播放到的*畫面，背景就會在每次捲動後換一張。現在 `drawVideo`
+  在靜態模式改從快照取樣；切換 backdrop、Transparency 改變畫布大小時也從快照重畫。
+- **捲動／版面變化**：`placeGlow()` 偵測到播放器移動時，靜態模式改成 debounce
+  200 ms，停下來才重畫一次（`REALIGN_MS`）；動態模式暫停時的行為不變。
+- `tick()` 的週期 `analyseRawFrame()` 在靜態模式停止（播放中每 500 ms 的 GPU
+  readback）。代價：播放器控制列的「亮畫面加暗層」（`lg-video-bright`）不再跟著
+  影片亮度變化 → 靜態模式下**固定開啟**（寧可多暗一點也要保持可讀）。
+- 關閉靜態模式：丟掉快照、重新量一次 letterbox／亮度、立即畫當下畫面、恢復迴圈。
+- `performance` 與 `static` 互相獨立（`performance` 仍是 15 fps 的即時光）。
 
-### 預計修改
+### 已決策
 
-1. `LG.DEFAULTS`（`settings.js:4-14`）新增設定 `static: false`。
-2. 靜態模式開啟時：
-   - `schedule()` 直接 return，不掛 `requestVideoFrameCallback`（涵蓋
-     visibilitychange / fullscreenchange / video 事件等所有呼叫點）。
-   - `syncMotion()` 強制 `lg-still`（既有 class，已會 pause 漂移），
-     不新增 class、不動 CSS。
-   - 擷取時機：頁面載入 + `yt-navigate-finish` / `yt-player-updated`
-     （`main.js` 的 `route()`）+ 暫停 / seek——這些正是既有 `drawOnce()`
-     的觸發點，保留即可。**不做週期性重取**，否則失去意義。
-   - **捲動／版面變化必須重新對位**：`#lg-ambient` 是 `position: fixed`
-     （`glass.css:112-120`），radial rect 是擷取當下烘進 canvas 的；捲動後
-     播放器移動、canvas 不動 → 光與播放器錯位。動態模式靠下一幀自動修正，
-     靜態模式沒有下一幀。`placeGlow()` 目前只在 `video.paused` 時重繪
-     （`ambient.js:557-563`），靜態模式要放寬這個條件，並**加 debounce**
-     （捲動停下來才重繪一次），否則捲動中每幀重繪，靜態就失去意義。
-3. 擷取路徑：**一發 `drawVideo(1)`（即既有 `drawOnce()` 路徑），不是
-   `showPixels()` / `drawStill()`**。理由：`drawStill()` 是縮圖退路，會
-   `setRadialShown(false)` 關掉 hybrid 放射 backdrop、blur 也是照 32×18
-   縮圖調的——走它會讓靜態模式的外觀與動態模式不同，直接違反「視覺與動態
-   模式一致」的驗收。`drawVideo(1)` 則保留 hybrid radial、glow、scrim
-   取樣全部不變，只是不再有 frame loop。**不需新增任何 manifest 權限**；
-   失敗（tainted / DRM）時沿用既有 `onBlocked` → 縮圖退路。
-4. 若日後想改成 `drawStill()` 那種「單張柔霧」質感，注意其 blur 是照 32×18
-   來源調的，影片幀要先降解析（如 64×36）再餵，否則太銳、像凍結的照片。
-   這是可選的視覺取捨，不是靜態模式的必要成分。
-5. `performance` 與 `static` 的關係：兩者獨立開關。`performance` 仍保留（有人
-   要的是省電但仍要活的環境光），不要把它升級成靜態。
+- 擷取來源：**A（`<video>` 元素）**。不需要任何權限；B（`captureVisibleTab`）不做。
+- 重取節奏：**不加週期性保險**，只在載入／暫停／跳轉時重取。
+- `thumbs.js`：不需要額外複用，DRM／tainted 時既有的 `onBlocked` →
+  `LG.thumbs.showVideo()` 已經是備援。
+- popup 手動刷新按鈕：沒做。暫停或跳轉就會重取；若實際使用覺得需要再加。
 
-### 待決策
+### 驗證（headless Chromium + SwiftShader，真正的 `settings.js` / `contrast.js` / `ambient.js`）
 
-- **擷取來源 A（建議）**：直接取 `<video>` 元素 once。免權限、免跨程序、
-  跟現有程式碼同一條路徑。缺點：拍不到頁面本身（只拿到影片畫面）——但現有
-  模式本來也只拿影片畫面，所以外觀一致。
-- **擷取來源 B**：`chrome.tabs.captureVisibleTab` 拍真實頁面像素。必須在
-  service worker 執行、要權限、拍不到自己這層 overlay、DRM 影片會是黑塊。
-  成本與風險都高，除非有明確需求否則不做。
-- 重取節奏：只在導頁與暫停重取，還是加一個很慢的（例如 60 s）保險？加了會讓
-  「靜態」不再是真正的靜態，建議不加，改由 popup 手動刷新。
-- `thumbs.js`（縮圖來源，非播放頁取色）尚未確認能否直接複用作為備援圖——實作前
-  要讀一次。
+測試影片：ffmpeg 產生，10 秒，前 0.4 秒全黑，上下各 45 px 黑邊，畫面持續變色。
+`requestVideoFrameCallback` 與 `drawImage` 都有計數。16 項全部通過：
 
-### 驗收
+| 項目 | 結果 |
+| --- | --- |
+| 黑色開頭後擷取到非黑畫面 | 通過（平均亮度 115） |
+| 靜態模式 `requestVideoFrameCallback` 次數 | 0 |
+| 播放 2.5 秒內的重繪次數 | 0；背景像素完全不變 |
+| `lg-still` | 有 |
+| letterbox 黑邊沒烘進背景 | 通過（畫面下緣下方那列平均亮度 84，不是黑） |
+| 捲動中重繪 | 0 次 |
+| 捲動停止後 | 從快照重畫 1 次，沒有從影片取樣 |
+| 跳轉、暫停 | 各重取 1 張新畫面 |
+| 關閉靜態模式 | 迴圈恢復、`lg-still` 解除 |
+| 播放中再開啟 | 迴圈立即停止 |
+| 載入後尚未播放（第一格是黑的）時擷取 | 先顯示黑畫面；開始播放後重取到非黑畫面，仍無迴圈 |
+| 縮圖淡入中（`showPixels`）擷取 | 快照勝出（對照：沒取消淡入時，紅色縮圖會蓋掉快照） |
 
-- [ ] 靜態模式下**沒有每幀排程**：`requestVideoFrameCallback` 完全不掛、
-      `drawVideo()` 只在一發擷取／捲動重新對位時被呼叫，播放 30 秒後
-      DevTools Performance 記錄為 idle
+主執行緒時間（播放中，每秒 ms，兩輪一致）：
+
+| 情況 | Task | Script |
+| --- | --- | --- |
+| 不載入擴充 | 1–1.6 | 0 |
+| **靜態模式** | **17–20** | **16–18** |
+| 動態模式，暫停中（既有的 idle 狀態） | 20 | 19 |
+| 動態模式，播放中 | 524–534 | 512–522 |
+
+- 靜態模式播放中 ≈ 既有的暫停狀態，比動態播放少約 96%。剩下的是每 250 ms 一次的
+  `tick()`（停掉計時器後降到 1.2 ms/s）；JS profiler 顯示其中我們的程式碼 5 秒內
+  只佔約 1 ms，沒有 readback、沒有 layout。這筆差距是既有的 idle 開銷，不是這次引入的。
+- 限制：SwiftShader 是軟體繪圖，GPU 端的開銷（模糊、合成）不在這些數字裡；
+  實機耗電要用 DevTools 或 `tests/perf/suite.mjs` 量。
+
+### 驗收（真實網站）
+
+- [ ] 靜態模式下**沒有每幀排程**（headless 已驗證），播放 30 秒後 DevTools
+      Performance 記錄為 idle
 - [ ] 殘留的 rAF 使用者仍正常且不影響結果：`tick()` 的 scrim 漸層
       (`scrimRaf`)、glow 定位 (`glowRaf`)、縮圖淡入 (`fadeRaf`)、
-      指標高光 (`specAngle`, `main.js`)，這些本來就只在需要時排程
-- [ ] 漂移動畫停止（enlarged backdrop＋播放中的情況；強制 `lg-still` 即可）
+      指標高光 (`specAngle`, `main.js`)
+- [ ] 漂移動畫停止（headless 已驗證 `lg-still`）
 - [ ] 頁面載入、切換影片（SPA 導頁）、暫停／seek 時背景都會更新
+      （暫停／seek headless 已驗證；SPA 導頁需實機）
 - [ ] 捲動停止、theater 切換、視窗 resize 後，backdrop 重新對位到播放器，
-      無錯位；捲動進行中不會每幀重繪（debounce 生效）
-- [ ] 新載入的 letterbox 影片：擷取前 `analyseRawFrame()` 已跑過一次，
-      黑邊沒有被烘進色盤
+      無錯位；捲動進行中不會每幀重繪（捲動 headless 已驗證）
+- [ ] 新載入的 letterbox 影片：黑邊沒有被烘進色盤（headless 已驗證）
+- [ ] YouTube 廣告：廣告結束切回正片時重取（應由 `loadeddata` 觸發，需實機確認）
 - [ ] 玻璃質感與 Transparency 0 / 50 / 100 皆保留，視覺與動態模式一致
 - [ ] scrim map 仍正確求解，文字對比達到目標（淺色、深色主題）
 - [ ] 影片暫停／結束後背景仍是該幀，不退回黑底
 - [ ] DRM / tainted 影片正確退到縮圖，不報錯
-- [ ] 關閉靜態模式後即時環境光完全恢復，無殘留狀態
-- [ ] 效能量測：靜態模式的 CPU 使用與動態模式、關閉插件三者比較
-- [ ] README、popup 說明、PRIVACY／`store/listing.md` 補上新的設定項
+- [ ] 關閉靜態模式後即時環境光完全恢復，無殘留狀態（headless 已驗證迴圈恢復）
+- [ ] 效能量測：實機上靜態模式、動態模式、關閉插件三者比較
+- [x] README、popup 說明、PRIVACY／`store/listing.md` 補上新的設定項
+      （PRIVACY 原本也漏列「backdrop mode」，一併補上）
+- [ ] 動畫瘋：同一套程式路徑，需實機看一次
 
 ## 設定頁（options page）＋抖內按鈕
 

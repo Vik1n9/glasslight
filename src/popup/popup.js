@@ -6,6 +6,7 @@ const DEFAULTS = {
   refraction: true,
   reduceTransparency: false,
   performance: false,
+  static: false,
   contrastTarget: 4.5,
   backdrop: 'hybrid',
 };

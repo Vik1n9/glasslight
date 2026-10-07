@@ -30,6 +30,12 @@
   "optPerformance": {
     "message": "パフォーマンスモード"
   },
+  "optStatic": {
+    "message": "静止背景"
+  },
+  "optStaticHint": {
+    "message": "動画の読み込み・一時停止・シークごとに1フレームだけを光源にし、再生には追従しません。省電力で、ガラスの見た目は変わりません。"
+  },
   "optBackdrop": {
     "message": "背景モード"
   },

@@ -171,6 +171,14 @@ src/popup/                settings UI
   changes, the backdrop's slow drift holds still until playback resumes, and
   動畫瘋's endlessly looping attention cues stop after three rounds — an idle
   page costs about what it does without the extension.
+- Static backdrop (popup): no frame loop at all. One frame is taken when a
+  video loads, pauses or seeks (after its letterbox is measured, and past a
+  black start) and copied aside; scrolling or resizing redraws that copy once
+  the page stops moving. Playback then costs what an idle page does. The
+  glass, Transparency and the contrast solve are unchanged; the player
+  controls keep their dimming layer on, since nothing follows the footage's
+  brightness any more. Independent of Performance mode, which keeps the
+  light live at 15 fps.
 - The Hybrid and Radial backdrops are one WebGL pass (`EXT_shader_texture_lod`,
   for explicit mip levels) over a 256×256 copy of the frame; without it the
   backdrop falls back to Enlarged. Both hold the backdrop's drift still, so it
@@ -178,7 +186,8 @@ src/popup/                settings UI
 - Refraction is Chromium-only; with it off (or in performance mode) glass
   falls back to `blur() saturate()`.
 - Honours `prefers-reduced-transparency`, `prefers-contrast: more`,
-  `prefers-reduced-motion`, plus in-popup Reduce Transparency / Performance.
+  `prefers-reduced-motion`, plus in-popup Reduce Transparency / Performance /
+  Static backdrop.
 
 ## Credits
 

@@ -30,6 +30,12 @@
   "optPerformance": {
     "message": "Performance mode"
   },
+  "optStatic": {
+    "message": "Static backdrop"
+  },
+  "optStaticHint": {
+    "message": "Light from one frame per video, pause or seek instead of following playback. Saves power; the glass stays the same."
+  },
   "optBackdrop": {
     "message": "Backdrop"
   },

@@ -9,6 +9,7 @@ LG.DEFAULTS = {
   refraction: true, // SVG lensing on navigation glass (Chromium only)
   reduceTransparency: false,
   performance: false, // 15 fps sampling, no refraction
+  static: false, // one frame per video / pause / seek instead of following playback
   contrastTarget: 4.5, // WCAG AA for body text; the popup offers 1.5–4.5
   backdrop: 'hybrid', // 'enlarged' · 'hybrid' · 'radial' (see ambient.js)
 };

@@ -30,6 +30,12 @@
   "optPerformance": {
     "message": "性能模式"
   },
+  "optStatic": {
+    "message": "静态背景"
+  },
+  "optStaticHint": {
+    "message": "每个视频、每次暂停或跳转只取一帧作为光源，不再随播放变化。更省电，玻璃效果不变。"
+  },
   "optBackdrop": {
     "message": "背景模式"
   },

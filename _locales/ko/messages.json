@@ -30,6 +30,12 @@
   "optPerformance": {
     "message": "성능 모드"
   },
+  "optStatic": {
+    "message": "정적 배경"
+  },
+  "optStaticHint": {
+    "message": "영상마다, 일시정지·탐색할 때마다 한 프레임만 빛으로 사용하고 재생을 따라가지 않습니다. 전력을 아끼며 유리 효과는 그대로입니다."
+  },
   "optBackdrop": {
     "message": "배경 모드"
   },

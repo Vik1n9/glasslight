@@ -30,6 +30,12 @@
   "optPerformance": {
     "message": "Modo rendimiento"
   },
+  "optStatic": {
+    "message": "Fondo estático"
+  },
+  "optStaticHint": {
+    "message": "La luz sale de un fotograma por vídeo, pausa o salto en lugar de seguir la reproducción. Ahorra energía; el cristal no cambia."
+  },
   "optBackdrop": {
     "message": "Fondo"
   },

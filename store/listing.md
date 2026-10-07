@@ -25,7 +25,7 @@ Glasslight turns the video sites you watch on — YouTube™ and 巴哈姆特動
 • Text always stays readable — the extension measures the light behind the page several times a second and keeps text at the contrast level you choose (up to WCAG 4.5:1). Bright or dark footage, light or dark theme; on YouTube's light theme, text sits on frosted cards so the colour around them stays vivid.
 • Works across YouTube — watch pages, theater mode, Shorts, channels, search, playlists, live chat and the miniplayer.
 • Also on Bahamut Anime Crazy (ani.gamer.com.tw) — ambient light from the playing episode or the anime cover you hover, glass top bars, menus, cards and player controls.
-• Accessibility — honours Reduce Transparency, Increase Contrast and Reduce Motion, with a performance mode for older hardware.
+• Accessibility — honours Reduce Transparency, Increase Contrast and Reduce Motion, with a performance mode and a static backdrop (one frame instead of live light) for older hardware and battery.
 • Private by design — video frames are analysed on your device and never leave it. No analytics, no tracking, no remote code.
 • Six languages — English, Traditional Chinese, Simplified Chinese, Spanish, Japanese, Korean — switchable in the popup.
 
@@ -37,7 +37,7 @@ Glasslight is an independent project and is not affiliated with, endorsed by, or
 Restyles video sites (youtube.com, ani.gamer.com.tw) with a frosted-glass interface and page-wide ambient light derived from the playing video, while keeping text legible.
 
 **Permission justifications**
-- `storage` — Saves the user's settings (on/off, light intensity, blur, transparency, contrast target, backdrop mode, refraction, reduce transparency, performance mode, language).
+- `storage` — Saves the user's settings (on/off, light intensity, blur, transparency, contrast target, backdrop mode, refraction, reduce transparency, performance mode, static backdrop, language).
 - Host permission `https://i.ytimg.com/*` — Reads YouTube thumbnail pixels (via the service worker) to colour the background when no video is playing. A page cannot read these pixels itself because the images are cross-origin.
 - Content scripts on `https://www.youtube.com/*` (including the live-chat frame) and `https://ani.gamer.com.tw/*` — Apply the glass styles and sample the playing video's frames locally for the ambient light and contrast calculation. On ani.gamer.com.tw browse pages they also read the colours of anime covers from `p2.bahamut.com.tw`, which serves them to any site (CORS), so no extra host permission is needed.
 

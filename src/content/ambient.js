@@ -73,6 +73,19 @@
   let crop = { x: 0, y: 0, w: 1, h: 1 }; // fraction of the frame to use
   let onBlocked = () => {};
 
+  // Static backdrop (LG.settings.static): no frame loop. One frame is copied
+  // per capture point (the video loading, a pause, a seek) and the backdrop
+  // is drawn from that copy, also when scrolling re-anchors it — redrawing
+  // from the video there would show whatever is playing by then.
+  const SHOT_W = 640; // wider than any canvas sample of it (SRC, W)
+  const REALIGN_MS = 200; // redraw once scrolling / resizing has stopped
+  let staticMode = false;
+  let shot = null; // OffscreenCanvas holding the captured frame, uncropped
+  let shotCtx;
+  let shotWanted = false; // a capture point passed; taken on the next tick
+  let shotBlack = false; // taken paused on black (often a video not started yet)
+  let realignTimer = 0;
+
   const fps = () => (LG.settings.performance ? 15 : 30);
   const active = () => LG.settings.enabled && !document.hidden && !document.fullscreenElement;
 
@@ -506,8 +519,9 @@
   function drawVideo(alpha = LG.prefersReducedMotion() ? 0.08 : 0.22 + 0.33 * clarity) {
     // Temporal smoothing above; immersive footage keeps less of the previous
     // frame so a moving shoal does not smear.
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
+    const el = staticMode && shot ? shot : video;
+    const vw = el === video ? video.videoWidth : el.width;
+    const vh = el === video ? video.videoHeight : el.height;
     if (!vw || !vh) return;
     const sx = crop.x * vw;
     const sy = crop.y * vh;
@@ -517,13 +531,13 @@
     const mode = LG.settings.backdrop;
     const rect = mode !== 'enlarged' && radialRect();
     const zone = rect && enlargedBox(rect);
-    if (rect && radial.render(video, sx, sy, sw, sh, rect, zone, mode !== 'radial')) {
+    if (rect && radial.render(el, sx, sy, sw, sh, rect, zone, mode !== 'radial')) {
       dctx.globalAlpha = alpha;
       dctx.filter = filter;
       dctx.drawImage(radial.canvas, 0, 0, W, H);
       setRadialShown(true);
     } else {
-      drawEnlarged(sx, sy, sw, sh, alpha, filter);
+      drawEnlarged(el, sx, sy, sw, sh, alpha, filter);
       setRadialShown(false);
     }
     sampleDirty = true;
@@ -540,14 +554,14 @@
     // The glow frames the player, so it keeps the whole picture.
     gctx.globalAlpha = alpha;
     gctx.filter = 'saturate(1.35)';
-    gctx.drawImage(video, sx, sy, sw, sh, -GW / 16, -GH / 13.5, GW + GW / 8, GH + GH / 6.75);
+    gctx.drawImage(el, sx, sy, sw, sh, -GW / 16, -GH / 13.5, GW + GW / 8, GH + GH / 6.75);
     gctx.filter = 'none';
     gctx.globalAlpha = 1;
   }
 
   // The 'enlarged' backdrop, and the fallback of the other two (no WebGL, or
   // no picture on screen to anchor to): the frame enlarged over the canvas.
-  function drawEnlarged(sx, sy, sw, sh, alpha, filter) {
+  function drawEnlarged(el, sx, sy, sw, sh, alpha, filter) {
     // Immersive, keep the footage's proportions: crop to cover the canvas
     // rather than stretch (a Short stretched to 16:9 turns every fish into a
     // smear). Eased in with the immersion, so the midpoint wash is unchanged.
@@ -570,7 +584,7 @@
     const oy = H / 13.5;
     dctx.globalAlpha = alpha;
     dctx.filter = filter;
-    dctx.drawImage(video, cx, cy, cw, ch, -ox, -oy, W + ox * 2, H + oy * 2);
+    dctx.drawImage(el, cx, cy, cw, ch, -ox, -oy, W + ox * 2, H + oy * 2);
   }
 
   // Re-measure the layout the light depends on: the picture the radial
@@ -585,7 +599,13 @@
     placeHalo(player, playerRect, clipAt);
     // A paused frame doesn't redraw by itself: re-anchor it after scrolling.
     // After the reads above, so its class toggle can't force a layout.
-    if (moved && videoLive() && video.paused && active()) {
+    // Static, the captured frame doesn't either; it waits for the page to
+    // stop moving, or it would redraw on every frame of the scroll.
+    if (!moved || !videoLive() || !active()) return;
+    if (staticMode) {
+      clearTimeout(realignTimer);
+      if (shot) realignTimer = setTimeout(drawShot, REALIGN_MS);
+    } else if (video.paused) {
       try {
         drawVideo(1);
       } catch {
@@ -674,7 +694,7 @@
   }
 
   function schedule() {
-    if (!video || frameCb || videoBlocked) return;
+    if (!video || frameCb || videoBlocked || staticMode) return;
     if (video.paused || video.ended || !active()) return;
     frameCb = video.requestVideoFrameCallback(onFrame);
   }
@@ -692,8 +712,15 @@
   }
 
   // Draw a single frame when paused/seeked so the light matches the picture.
+  // Static, redraw the captured frame (a new layout or backdrop), or take
+  // one if there is none yet.
   function drawOnce() {
     if (!video || videoBlocked || !active()) return;
+    if (staticMode) {
+      if (shot) drawShot();
+      else shotWanted = true;
+      return;
+    }
     try {
       for (let i = 0; i < 6; i += 1) drawVideo(); // converge the smoothing
     } catch {
@@ -701,25 +728,76 @@
     }
   }
 
+  function drawShot() {
+    if (!staticMode || !shot || !videoLive() || !active()) return;
+    // A thumbnail still fading in would paint over the frame, with no next
+    // frame to paint it back.
+    cancelAnimationFrame(fadeRaf);
+    try {
+      drawVideo(1);
+    } catch {
+      blockVideo();
+    }
+  }
+
+  // Static capture, from tick(). The letterbox crop is measured on the same
+  // frame first, so the bars never get baked into the backdrop. A video often
+  // starts on black: while playing, an all-black frame waits for the next
+  // try, which also keeps counting towards the protected-content fallback
+  // (analyseRawFrame). Paused on black, black is what there is to show, until
+  // playback starts: a video that has loaded but not started yet sits on
+  // its first frame, often black.
+  let shotTries = 0;
+  function takeShot() {
+    if ((shotTries += 1) % 2 === 0) return; // every 2nd tick, as the DRM count expects
+    const picture = analyseRawFrame();
+    if (!videoLive() || (!picture && !video.paused)) return;
+    const w = Math.min(SHOT_W, video.videoWidth);
+    const h = Math.max(1, Math.round((video.videoHeight * w) / video.videoWidth));
+    if (!shot) {
+      shot = new OffscreenCanvas(w, h);
+      shotCtx = shot.getContext('2d');
+    } else if (shot.width !== w || shot.height !== h) {
+      shot.width = w;
+      shot.height = h;
+    }
+    shotCtx.drawImage(video, 0, 0, w, h);
+    shotWanted = false;
+    shotBlack = !picture;
+    shotTries = 0;
+    // The controls' dimming layer followed the footage's brightness; with
+    // nothing following it any more, keep it on.
+    document.documentElement.classList.add('lg-video-bright');
+    drawShot();
+  }
+
+  function recapture() {
+    shotWanted = true;
+    shotBlack = false;
+    shotTries = 0;
+  }
+
   // The canvas drift (lg-drift) re-renders a full-viewport blurred layer —
   // and every glass surface over it — on every frame. Moving footage pays
   // that anyway; a still light (thumbnail, paused or no video) doesn't need
-  // it, so the drift holds its position until playback resumes.
+  // it, so the drift holds its position until playback resumes. Neither does
+  // a static backdrop.
   function syncMotion() {
-    root?.classList.toggle('lg-still', !(videoLive() && !video.paused && !video.ended));
+    root?.classList.toggle('lg-still', staticMode || !(videoLive() && !video.paused && !video.ended));
   }
 
   const videoEvents = {
     play: () => (schedule(), syncMotion()),
-    playing: () => (schedule(), syncMotion()),
-    seeked: () => drawOnce(),
-    pause: () => (drawOnce(), syncMotion()),
+    playing: () => (staticMode && shotBlack && recapture(), schedule(), syncMotion()),
+    seeked: () => (staticMode ? recapture() : drawOnce()),
+    pause: () => (staticMode ? recapture() : drawOnce(), syncMotion()),
     ended: () => syncMotion(),
     loadeddata: () => {
       videoBlocked = false;
       blackTicks = 0;
       crop = { x: 0, y: 0, w: 1, h: 1 };
-      drawOnce();
+      if (staticMode) recapture();
+      else drawOnce();
       schedule();
       syncMotion();
     },
@@ -734,6 +812,8 @@
     video = el;
     videoBlocked = false;
     blackTicks = 0;
+    shot = null;
+    shotWanted = false;
     playerResize.disconnect();
     const player = video.closest(playerSelector());
     if (player) playerResize.observe(player);
@@ -748,7 +828,10 @@
 
   function unbindVideo() {
     cancel();
+    clearTimeout(realignTimer);
     if (!video) return;
+    shot = null;
+    shotWanted = false;
     for (const [ev, fn] of Object.entries(videoEvents)) video.removeEventListener(ev, fn);
     video = null;
     sampleDirty = true;
@@ -759,8 +842,9 @@
 
   // ---- raw frame analysis: letterbox crop, DRM detection, player brightness --
 
+  // True when the frame has a picture (not all black).
   function analyseRawFrame() {
-    if (!videoLive() || !video.videoWidth) return;
+    if (!videoLive() || !video.videoWidth) return false;
     let px;
     try {
       pctx.drawImage(video, 0, 0, PROBE_W, PROBE_H);
@@ -768,7 +852,7 @@
       px = prctx.getImageData(0, 0, PROBE_W, PROBE_H).data;
     } catch {
       blockVideo();
-      return;
+      return false;
     }
 
     const dark = (o) => px[o] < 14 && px[o + 1] < 14 && px[o + 2] < 14;
@@ -788,10 +872,10 @@
     if (allDark && !video.paused && video.currentTime > 2) {
       blackTicks += 1;
       if (blackTicks > 8000 / (STATS_MS * 2)) blockVideo(); // analysed every 2nd tick
-      return;
+      return false;
     }
     blackTicks = 0;
-    if (allDark) return;
+    if (allDark) return false;
 
     // Letterbox / pillarbox detection (max 25% per side).
     let top = 0;
@@ -812,6 +896,7 @@
     // Clear-glass player controls need a dimming layer over bright footage.
     const bottomLum = LG.contrast.bandLuminance(px, PROBE_W, Math.floor(PROBE_H * 0.7), PROBE_H);
     document.documentElement.classList.toggle('lg-video-bright', bottomLum > 0.42);
+    return true;
   }
 
   // ---- still-image source (thumbnails) ------------------------------------
@@ -1005,6 +1090,7 @@
 
   function tick() {
     if (!active()) return;
+    if (staticMode && shotWanted && videoLive()) takeShot();
     // Nothing new on the canvas and the eased values have arrived: the
     // result would be identical, so skip the GPU readback and the solve.
     // Layout can still move the player or open a side panel: keep the glow
@@ -1014,7 +1100,7 @@
       return;
     }
     // Letterbox / brightness / DRM checks don't need 4 Hz.
-    if (videoLive() && !video.paused && (tickCount += 1) % 2 === 0) analyseRawFrame();
+    if (!staticMode && videoLive() && !video.paused && (tickCount += 1) % 2 === 0) analyseRawFrame();
     // Sample what the page shows: #lg-ambient-canvas has saturate(1.5).
     // Re-read only after the canvas changed; easing towards the target
     // tint reuses the last sample.
@@ -1144,6 +1230,23 @@
     onBlocked = opts.onBlocked || onBlocked;
     mount();
     applyClarity();
+    // Static on: drop the frame loop and take the frame on screen now. Off:
+    // back to the live frame at once.
+    if (!!LG.settings.static !== staticMode) {
+      staticMode = !!LG.settings.static;
+      shot = null;
+      clearTimeout(realignTimer);
+      if (staticMode) {
+        cancel();
+        if (video) recapture();
+      } else {
+        shotWanted = false;
+        analyseRawFrame(); // the crop and the controls' dimming follow the footage again
+        drawOnce();
+        schedule();
+      }
+      syncMotion();
+    }
     // Switching the backdrop redraws at once, also under a paused frame.
     if (backdrop !== LG.settings.backdrop) {
       if (backdrop !== null && videoLive() && !stillShown) drawOnce();

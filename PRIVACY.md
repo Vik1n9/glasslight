@@ -12,7 +12,7 @@ look inside your browser. It does not collect, sell, or share personal data.
 | Frames of the video you are watching | Downscaled to a few dozen pixels in memory to compute ambient-light colours and text contrast, then discarded. | **No** |
 | Video thumbnail images from `i.ytimg.com` | Fetched to pick colours for the background when no video is playing; reduced to 32×18 pixels in memory, cached only for the open tab. | Only the normal image request to YouTube's image server, the same one YouTube itself makes. |
 | Anime cover images from `p2.bahamut.com.tw` | On ani.gamer.com.tw browse pages (home, lists, search, watch history), the cover you hover or the one in the middle of the screen is fetched to pick background colours; reduced to 32×18 pixels in memory, cached only for the open tab. | Only the normal image request to Bahamut's image server, for covers the page already shows. No cookies are sent with it. |
-| Your settings (on/off, light intensity, blur, transparency, contrast target, refraction, reduce transparency, performance mode, language) | Stored with `chrome.storage.sync`. If Chrome Sync is on, Chrome syncs them across your signed-in browsers. | Only through Chrome Sync, controlled by your browser settings. |
+| Your settings (on/off, light intensity, blur, transparency, contrast target, backdrop mode, refraction, reduce transparency, performance mode, static backdrop, language) | Stored with `chrome.storage.sync`. If Chrome Sync is on, Chrome syncs them across your signed-in browsers. | Only through Chrome Sync, controlled by your browser settings. |
 
 ## What the extension does not do
 
