@@ -1,0 +1,149 @@
+/* Options page: the popup's glass, at page size. Name and control share a
+   row, the description runs under both; one column below 600px. */
+:root {
+  --bg: #0f0f12;
+  --text: #f5f5f7;
+  --muted: #b0b0b6;
+  --card: rgb(40 40 46 / 0.62);
+  --rim: rgb(255 255 255 / 0.3);
+  --fill: rgb(255 255 255 / 0.08);
+  --accent: #4ba3ff;
+  --danger: #ff6961;
+  --ok: #34c759;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #eef0f5;
+    --text: #1d1d1f;
+    --muted: #55555b;
+    --card: rgb(255 255 255 / 0.7);
+    --rim: rgb(255 255 255 / 0.95);
+    --fill: rgb(0 0 0 / 0.06);
+    --accent: #0062cc;
+    --danger: #c9302c;
+    --ok: #1f8a3c;
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 32px 24px 64px;
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Noto Sans TC", "Noto Sans JP", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(70% 50% at 0% 0%, #ff3b6b33, transparent 70%),
+    radial-gradient(70% 50% at 100% 100%, #0a84ff33, transparent 70%),
+    var(--bg);
+  min-height: 100vh;
+}
+
+.top, main { max-width: 760px; margin: 0 auto; }
+
+.top { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.top img { border-radius: 10px; }
+h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.02em; }
+.status { margin-left: auto; color: var(--muted); font-size: 13px; min-height: 1em; }
+.status[data-state="saved"] { color: var(--ok); }
+.status[data-state="error"] { color: var(--danger); }
+
+section {
+  margin: 0 0 16px;
+  padding: 8px 20px 4px;
+  border-radius: 20px;
+  background: var(--card);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 0.5px var(--rim), 0 8px 24px rgb(0 0 0 / 0.18);
+}
+
+h2 { margin: 10px 0 2px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+
+.setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 260px);
+  grid-template-areas: "name control" "desc desc";
+  gap: 6px 24px;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 0.5px solid var(--fill);
+}
+h2 + .setting { border-top: 0; }
+.name { grid-area: name; font-weight: 600; }
+.name output { margin-left: 6px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+.control { grid-area: control; display: flex; justify-content: flex-end; }
+.desc { grid-area: desc; margin: 0; color: var(--muted); font-size: 13px; }
+
+body.off .dims { opacity: 0.45; }
+body.off .dims .control { pointer-events: none; }
+
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+.segmented {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px; width: 100%;
+  border-radius: 999px; background: var(--fill); box-shadow: inset 0 0 0 0.5px var(--rim);
+}
+.segmented label { position: relative; cursor: pointer; }
+.segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segmented span {
+  display: block; padding: 5px 8px; border-radius: 999px; text-align: center; color: var(--muted);
+  transition: background 0.2s, color 0.2s;
+}
+.segmented input:checked + span { background: var(--card); color: var(--text); box-shadow: inset 0 0 0 0.5px var(--rim), 0 1px 4px rgb(0 0 0 / 0.2); }
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.switch { position: relative; display: inline-block; width: 48px; height: 28px; }
+.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.switch span {
+  position: absolute; inset: 0; border-radius: 14px; background: var(--fill); pointer-events: none;
+  box-shadow: inset 0 0 0 0.5px var(--rim); transition: background 0.2s;
+}
+.switch span::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.switch input:checked + span { background: var(--ok); }
+.switch input:checked + span::after { transform: translateX(20px); }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+button, select {
+  font: inherit; color: var(--text); border: 0; border-radius: 999px; padding: 7px 16px;
+  background: var(--fill); box-shadow: inset 0 0 0 0.5px var(--rim); cursor: pointer;
+}
+button { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s; }
+button:active { transform: scale(0.96); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+select option { color: #1d1d1f; background: #fff; }
+
+button.danger { color: var(--danger); }
+button.danger.armed { color: #fff; background: var(--danger); }
+
+.support p, .support ul { margin: 8px 0; }
+.support ul { padding-left: 20px; color: var(--muted); font-size: 13px; }
+.support li + li { margin-top: 4px; }
+.donate-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 0 16px; }
+button.donate {
+  padding: 10px 22px; font-weight: 600; color: #fff;
+  /* White text stays above 5:1 on both ends of the gradient. */
+  background: linear-gradient(135deg, #c2255c, #b8460b);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), 0 4px 14px rgb(194 37 92 / 0.35);
+}
+.test-badge {
+  padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  color: #7a4b00; background: #ffd27a;
+}
+
+@media (max-width: 600px) {
+  body { padding: 20px 16px 48px; }
+  section { padding: 6px 16px 2px; }
+  .setting { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "control" "desc"; }
+  .control { justify-content: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

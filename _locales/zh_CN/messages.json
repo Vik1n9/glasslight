@@ -56,5 +56,50 @@
   },
   "optLanguageAuto": {
     "message": "跟随浏览器"
+  },
+  "optionsTitle": {
+    "message": "Glasslight 设置"
+  },
+  "openOptions": {
+    "message": "所有设置与说明"
+  },
+  "secGeneral": {
+    "message": "常规"
+  },
+  "secAppearance": {
+    "message": "外观"
+  },
+  "secBehavior": {
+    "message": "行为"
+  },
+  "secAdvanced": {
+    "message": "高级"
+  },
+  "secSupport": {
+    "message": "支持开发"
+  },
+  "statusSaving": {
+    "message": "保存中…"
+  },
+  "statusSaved": {
+    "message": "已保存"
+  },
+  "statusError": {
+    "message": "保存失败，稍后重试"
+  },
+  "statusQuota": {
+    "message": "保存过于频繁，稍后自动重试"
+  },
+  "resetAction": {
+    "message": "重置"
+  },
+  "resetConfirm": {
+    "message": "再按一次以重置"
+  },
+  "donateButton": {
+    "message": "赞助 NT$100"
+  },
+  "donateTestLink": {
+    "message": "测试链接，非正式付款页"
   }
 }

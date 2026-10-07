@@ -56,5 +56,50 @@
   },
   "optLanguageAuto": {
     "message": "Según el navegador"
+  },
+  "optionsTitle": {
+    "message": "Ajustes de Glasslight"
+  },
+  "openOptions": {
+    "message": "Todos los ajustes"
+  },
+  "secGeneral": {
+    "message": "General"
+  },
+  "secAppearance": {
+    "message": "Apariencia"
+  },
+  "secBehavior": {
+    "message": "Comportamiento"
+  },
+  "secAdvanced": {
+    "message": "Avanzado"
+  },
+  "secSupport": {
+    "message": "Apoyar el desarrollo"
+  },
+  "statusSaving": {
+    "message": "Guardando…"
+  },
+  "statusSaved": {
+    "message": "Guardado"
+  },
+  "statusError": {
+    "message": "No se pudo guardar; se reintentará"
+  },
+  "statusQuota": {
+    "message": "Demasiados guardados; se reintentará en breve"
+  },
+  "resetAction": {
+    "message": "Restablecer"
+  },
+  "resetConfirm": {
+    "message": "Pulsa otra vez para restablecer"
+  },
+  "donateButton": {
+    "message": "Aportar NT$100"
+  },
+  "donateTestLink": {
+    "message": "Enlace de prueba: no es una página de pago real"
   }
 }

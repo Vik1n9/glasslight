@@ -56,5 +56,50 @@
   },
   "optLanguageAuto": {
     "message": "ブラウザに合わせる"
+  },
+  "optionsTitle": {
+    "message": "Glasslight の設定"
+  },
+  "openOptions": {
+    "message": "すべての設定"
+  },
+  "secGeneral": {
+    "message": "一般"
+  },
+  "secAppearance": {
+    "message": "外観"
+  },
+  "secBehavior": {
+    "message": "動作"
+  },
+  "secAdvanced": {
+    "message": "詳細"
+  },
+  "secSupport": {
+    "message": "開発を支援"
+  },
+  "statusSaving": {
+    "message": "保存中…"
+  },
+  "statusSaved": {
+    "message": "保存しました"
+  },
+  "statusError": {
+    "message": "保存できませんでした。再試行します"
+  },
+  "statusQuota": {
+    "message": "保存が多すぎます。少し後に再試行します"
+  },
+  "resetAction": {
+    "message": "リセット"
+  },
+  "resetConfirm": {
+    "message": "もう一度押すとリセット"
+  },
+  "donateButton": {
+    "message": "NT$100 を寄付"
+  },
+  "donateTestLink": {
+    "message": "テスト用リンク（実際の支払いページではありません）"
   }
 }

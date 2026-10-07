@@ -56,5 +56,50 @@
   },
   "optLanguageAuto": {
     "message": "브라우저 설정 따르기"
+  },
+  "optionsTitle": {
+    "message": "Glasslight 설정"
+  },
+  "openOptions": {
+    "message": "모든 설정"
+  },
+  "secGeneral": {
+    "message": "일반"
+  },
+  "secAppearance": {
+    "message": "모양"
+  },
+  "secBehavior": {
+    "message": "동작"
+  },
+  "secAdvanced": {
+    "message": "고급"
+  },
+  "secSupport": {
+    "message": "개발 후원"
+  },
+  "statusSaving": {
+    "message": "저장 중…"
+  },
+  "statusSaved": {
+    "message": "저장됨"
+  },
+  "statusError": {
+    "message": "저장하지 못했습니다. 다시 시도합니다"
+  },
+  "statusQuota": {
+    "message": "너무 자주 저장했습니다. 잠시 후 다시 시도합니다"
+  },
+  "resetAction": {
+    "message": "초기화"
+  },
+  "resetConfirm": {
+    "message": "한 번 더 누르면 초기화"
+  },
+  "donateButton": {
+    "message": "NT$100 후원"
+  },
+  "donateTestLink": {
+    "message": "테스트 링크 — 실제 결제 페이지가 아닙니다"
   }
 }

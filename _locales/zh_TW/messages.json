@@ -56,5 +56,50 @@
   },
   "optLanguageAuto": {
     "message": "跟隨瀏覽器"
+  },
+  "optionsTitle": {
+    "message": "Glasslight 設定"
+  },
+  "openOptions": {
+    "message": "所有設定與說明"
+  },
+  "secGeneral": {
+    "message": "一般"
+  },
+  "secAppearance": {
+    "message": "外觀"
+  },
+  "secBehavior": {
+    "message": "行為"
+  },
+  "secAdvanced": {
+    "message": "進階"
+  },
+  "secSupport": {
+    "message": "支持開發"
+  },
+  "statusSaving": {
+    "message": "儲存中…"
+  },
+  "statusSaved": {
+    "message": "已儲存"
+  },
+  "statusError": {
+    "message": "儲存失敗，稍後重試"
+  },
+  "statusQuota": {
+    "message": "儲存太頻繁，稍後自動重試"
+  },
+  "resetAction": {
+    "message": "重設"
+  },
+  "resetConfirm": {
+    "message": "再按一次以重設"
+  },
+  "donateButton": {
+    "message": "贊助 NT$100"
+  },
+  "donateTestLink": {
+    "message": "測試連結，非正式付款頁"
   }
 }
