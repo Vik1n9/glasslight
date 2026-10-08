@@ -568,7 +568,9 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
 
 ### 待驗證
 
-- [ ] 在本機重跑完整 debug suite（harness 指紋已變，base 快取會重建）：
+- [x] 在本機重跑完整 debug suite（harness 指紋已變，base 快取會重建）：
+      （2026-10-08 完成：debug 卡在 yt4k/light 後改跑非 debug 完整矩陣 54 分鐘，兩輪全部跑完；
+      最終 FAIL 4／WARN 4，全在第 1 輪；第 2 輪全 PASS。結果：`docs/perf/2026-10-08-pr7-state-current/`）
       `caffeinate -d -i -u node tests/perf/suite.mjs --debug --base origin/main --cand HEAD --window 0,0`
       - 進度（2026-10-08 12:00 起，`a4b337a`，harness 含 `state-current`）：
         - `yt/light`、`yt/dark`：PASS。
@@ -585,8 +587,7 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
         但 cand 第 0 張對 base 的 fresh 畫面仍 FAIL（Δ 7.73），且 cand 第 2 張也過期
         （數值與 base 相同）。兩種判讀情境都不完全符合，**交回分析**（細節見該資料夾 README）。
       - `ani/dark`（首次跑到）：**PASS**，兩邊 `state-current` 全部通過。
-      - 下一步：等第 2 輪跑完，把整份 `verdicts.txt` 補進同一資料夾，
-        再勾選本項。
+      - 第 2 輪：全部 PASS。整份 `verdicts.txt` 與所有 `result-*.json` 已存進同一資料夾。
 - [ ] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：判斷是 harness 的新求解步驟
       造成，還是 PR 的變化（看 base 與 cand 的 `-fresh.png` 是否相同；必要時用舊 harness
       重跑這格比較）
@@ -606,8 +607,10 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
       本 PR 再對新的 main 跑一次，該格應無 WARN
 - [ ] RAM 成長警告（`max-glass/ani-battle`，cand 4 次中 2 次，base 從未出現）：多跑幾輪看
       是否重現；若只在 cand 出現，比對 heap snapshot 找是否有每幀累積的配置
-- [ ] `yt/light/solid-glow` RAM ×1.16 警告：觀察是否重現（軟門檻）
-- [ ] ani/dark 與第 2 輪：跑完（2026-10-08：ani/dark PASS；第 2 輪進行中）
+      （2026-10-08 state-current 完整矩陣：**沒有出現**任何 RAM 警告。累計 cand 5 次中 2 次）
+- [x] `yt/light/solid-glow` RAM ×1.16 警告：觀察是否重現（軟門檻）
+      （2026-10-08 state-current 完整矩陣兩輪都未重現）
+- [x] ani/dark 與第 2 輪：跑完（2026-10-08：ani/dark PASS；第 2 輪全 PASS）
 - [ ] harness 不涵蓋的部分手動檢查：縮圖光（首頁、搜尋、頻道頁）、popup 與設定頁 UI
 - [ ] （可選）`suite.mjs` 自己保持螢幕不休眠，不必依賴外部 `caffeinate`
       （報告：螢幕休眠時 Chromium 停止繪製，動畫瘋那格卡在 `waitPlayable` 2 小時）

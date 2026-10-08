@@ -28,3 +28,19 @@ Display 2560x1440 HDR, signed in, `caffeinate -d`. The harness closed the option
 ## ani/dark (first time this cell was reached)
 
 **PASS** (`verdict-ani-dark.txt`). `state-current` held on every frozen frame on both sides, so the stale state on main did not show up in the dark theme.
+
+## Full matrix (both rounds, 54 min): final verdict
+
+`verdicts.txt` holds the whole `compare.mjs` output; `results/` holds every cell. The verdict was **FAIL: 4 hard failures and 4 warnings**, all in round 1.
+
+| cell | round 1 | round 2 (default preset) |
+|---|---|---|
+| yt/light | PASS | PASS |
+| yt/dark | PASS | PASS |
+| yt4k/light | FAIL: `solid-glow/yt4k-heavy/0@36s` mean Δ 2.25 (limit 2), 0 % px > 24 | PASS |
+| yt4k/dark | PASS | PASS |
+| ani/light | FAIL: see the table above (3 hard failures, 4 warnings) | PASS |
+| ani/dark | PASS | PASS |
+
+- `yt4k/light` Δ 2.25 came out with the same value in three measurements: the debug run, its `--resume`, and this run. It reproduces. It sits in the masthead only, and `state-current` held on both sides.
+- **No RAM warnings anywhere in this run.** The earlier "RAM grew over the window (leak?)" on `max-glass/ani-battle` and the `yt/light/solid-glow` ×1.16 did not come back.
