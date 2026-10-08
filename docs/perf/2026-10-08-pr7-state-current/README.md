@@ -24,3 +24,7 @@ Display 2560x1440 HDR, signed in, `caffeinate -d`. The harness closed the option
   - In this run the order is reversed from the first report. Base's own frame has the most legible nav. Base-fresh is less legible. Cand is the least legible: the right-hand nav items are barely visible.
   - Cand passes `state-current`, so a fresh solve gives cand that same faint state.
   - Neither branch of the TODO's reading rule fits ("base stale and comparison passes" / "base current but still DIFF"), so this goes back for analysis with these files.
+
+## ani/dark (first time this cell was reached)
+
+**PASS** (`verdict-ani-dark.txt`). `state-current` held on every frozen frame on both sides, so the stale state on main did not show up in the dark theme.

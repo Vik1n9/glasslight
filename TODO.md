@@ -584,7 +584,8 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
         base 在 `max-glass/ani-battle` 0、2 兩張 `state-current` 過期 → main 缺陷**確認**；
         但 cand 第 0 張對 base 的 fresh 畫面仍 FAIL（Δ 7.73），且 cand 第 2 張也過期
         （數值與 base 相同）。兩種判讀情境都不完全符合，**交回分析**（細節見該資料夾 README）。
-      - 下一步：等完整矩陣跑完（`ani/dark`、第 2 輪），把整份 `verdicts.txt` 補進同一資料夾，
+      - `ani/dark`（首次跑到）：**PASS**，兩邊 `state-current` 全部通過。
+      - 下一步：等第 2 輪跑完，把整份 `verdicts.txt` 補進同一資料夾，
         再勾選本項。
 - [ ] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：判斷是 harness 的新求解步驟
       造成，還是 PR 的變化（看 base 與 cand 的 `-fresh.png` 是否相同；必要時用舊 harness
@@ -606,7 +607,7 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
 - [ ] RAM 成長警告（`max-glass/ani-battle`，cand 4 次中 2 次，base 從未出現）：多跑幾輪看
       是否重現；若只在 cand 出現，比對 heap snapshot 找是否有每幀累積的配置
 - [ ] `yt/light/solid-glow` RAM ×1.16 警告：觀察是否重現（軟門檻）
-- [ ] ani/dark 與第 2 輪：跑完
+- [ ] ani/dark 與第 2 輪：跑完（2026-10-08：ani/dark PASS；第 2 輪進行中）
 - [ ] harness 不涵蓋的部分手動檢查：縮圖光（首頁、搜尋、頻道頁）、popup 與設定頁 UI
 - [ ] （可選）`suite.mjs` 自己保持螢幕不休眠，不必依賴外部 `caffeinate`
       （報告：螢幕休眠時 Chromium 停止繪製，動畫瘋那格卡在 `waitPlayable` 2 小時）
