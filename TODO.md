@@ -11,7 +11,7 @@
 2026-10-08 本機效能測試（`tests/perf/suite.mjs --debug` 對 `main`）：YouTube 四格通過，
 動畫瘋 `ani/light` 的 `max-glass/ani-battle` 未過，`ani/dark` 與第 2 輪未跑到。
 完整報告與原始結果在 [`docs/perf/2026-10-08-pr7/`](docs/perf/2026-10-08-pr7/REPORT.md)；
-待查事項見下方「效能測試發現」。
+待查事項見下方「PR #7 效能測試：待驗證」。
 
 ---
 
@@ -138,24 +138,17 @@
       （已登入帳號的外觀設定會蓋過 `prefers-color-scheme`，改用未登入 profile 測；
       截圖當下影片在緩衝、畫面全黑，**沒驗成**，需再看一次）
 - [ ] `tests/perf/suite.mjs` 對 `main` 比較，無效能退步
-      （2026-10-08：YouTube 4 格通過；`ani/light` 未過，見下節；`ani/dark`、第 2 輪未跑到）
+      （2026-10-08：YouTube 4 格通過；`ani/light` 未過；後續與待驗證項目統一放在下方
+      「PR #7 效能測試：待驗證」）
 
-### 效能測試發現（2026-10-08，報告：`docs/perf/2026-10-08-pr7/REPORT.md`）
+已完成的測試工具修正（2026-10-08）：
 
 - [x] 測試腳本隔離與畫面無關的分頁：設定頁首次安裝會自動開啟，而每次測試都是新 profile，
       cand 因此多一個 renderer，RAM 被算成 cand 的成本（動畫瘋 6 組設定 ×1.2）。
       `run.mjs` 改以 targetId 認出測試分頁、關掉其他分頁並記錄在 `result.strayPages`。
       隔離後 ×1.2 的 RAM 警告消失。
-- [ ] `max-glass/ani-battle` 場景切換後（frame 0 @1201s），動畫瘋頂欄後方的環境光與
-      `main` 不同（cand 4 次中 3 次 Δ≈31；畫面與播放器 Δ≈0）。`main` 仍是上一幕的暗色，
-      cand 已跟上新畫面。**待判斷是否為預期行為**：是 → 該片段的凍結畫面改在切換後
-      留足夠穩定時間或換擷取點；不是 → 找出 max-glass 路徑在切換時的差異。
-- [ ] 同一格「量測期間 RAM 持續上升（leak?）」警告（cand 4 次中 2 次，含隔離後；
-      `main` 未出現）。查 max-glass 路徑在高動態片段是否有保留畫面或畫布。
-- [ ] 補跑 `ani/dark` 與第 2 輪（除錯模式停在 `ani/light`，需上面兩項有結論）
 - [x] 無人在場時螢幕睡眠會讓 Chromium 停止繪製、動畫瘋格子卡在 `waitPlayable`；
-      以 `caffeinate -d -i -u node tests/perf/suite.mjs …` 執行即可。可考慮讓 `suite.mjs`
-      自己持有不睡眠的 assertion。
+      以 `caffeinate -d -i -u node tests/perf/suite.mjs …` 執行即可。
 
 ## 靜態模式（Static backdrop）
 
