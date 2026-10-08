@@ -553,12 +553,52 @@ Apple Pay / Google Pay 無法在 `chrome-extension://` 頁面內執行，這是�
 - 為什麼 base 停在過期狀態：**未確認**。沙箱連不到動畫瘋（403），軟體解碼也重現不出
   跳轉競態；兩版有差異的程式路徑都碰不到頁首的 scrim 格與 masthead 求解。
 
-### 推論（未驗證）
+### 推論（未驗證，已被下方「根因」取代）
 
 - 候選一：暫停＋跳轉之後，最後一次取樣與求解用的畫面和最後顯示的畫面不同。
 - 候選二：scrim 的 240 ms 漸變只靠 `requestAnimationFrame` 推進；若當時 rAF 沒有執行
   （例如視窗被遮或螢幕休眠），畫面上的 scrim 會停在舊值，而 `tick()` 在 settled 後提早
   返回、不再重畫。
+
+### 根因（2026-10-08 第二次結果後確認，已在本地重現）
+
+- **兩次結果裡頁首只有兩種狀態，build 互換**（量自兩份 header 截圖）：
+
+  | 狀態 | 右半導覽列對比 | 頁首亮度 | 出現在 |
+  | --- | --- | --- | --- |
+  | A 淡（收斂） | 1.14–1.15 | 約 57 | 第一次 base、第二次 cand（`state-current` 通過） |
+  | B 清楚（過期） | 3.47–3.55 | 約 134–140 | 第一次 cand、第二次 base（`state-current` WARN） |
+  | 中間 | 1.55 | 約 76 | 第二次 base 強制求解一次後（base-fresh） |
+
+  → 拿到哪一種**取決於時序，與 build 無關**；不是 PR 造成的差異。
+- **機制**：淺色主題下 scrim「需要時立即加深、不需要時每 tick 只放鬆 15%」，玻璃底色也一樣；
+  但 `tick()` 的 `settled` **只看玻璃底色是否收斂**。玻璃先到，`tick()` 就提早返回，
+  scrim 停在放鬆到一半的值（狀態 B），停在多少看時序。強制 tick 只會讓它再放鬆到玻璃
+  又收斂為止，所以 base-fresh 是中間值（1.55），不是收斂值。
+- **重現**（本地，暫停在黑畫面再跳到彩色畫面，淺色主題、對比 4.5）：main 與 PR **數字完全相同**——
+  scrim 0.769 → 放鬆一步到 0.755 就停住（7 秒後不變），真正的收斂值是 0.68–0.73。
+- 因此：ani 第 0 張的 Δ 7.73（cand 對 base-fresh）＝ cand 已收斂 vs base-fresh 只收斂一半；
+  第 2 張 cand 過期（與 base 相同數字）＝ 同一個缺陷。
+
+### 修正（本分支）
+
+- `ambient.js`：`settled` 另外要求 scrim map 也收斂（`scrimGap < 0.004`，與 `paintScrim`
+  的重畫門檻相同）；畫面靜止時（暫停、縮圖）scrim 與玻璃底色每 tick 放鬆 50%（播放中維持
+  15%，避免閃動）。本地：暫停後約 1.5 秒內收斂到差 0.003–0.01，4.5 秒完全收斂；main 始終停在錯誤值。
+- harness：
+  - 判定過期前先**連續強制 4 次 tick**（單次只放鬆 15%，小差距會漏判）；
+  - 判定過期後**持續強制 tick 直到畫面不再變化**，fresh 才是收斂值（main 沒有修正，需要這樣才可比）；
+  - 每張凍結畫面記錄即時變數（`--lg-glow-opacity`、`--lg-glow-lift`、`--lg-tint-rgb`、
+    `--lg-glass-live` 等）；比對 DIFF 時 compare 列出兩版不同的變數。
+- 本地模擬 harness 流程（main vs 修正後）：修正版 3/3 收斂且 Δ 0；修正版對 main 的凍結畫面
+  最高 Δ 1.91／3.66% > 24（FAIL），對 main 收斂後的 fresh 畫面 Δ 0.57–0.84（通過）。
+  靜態模式、設定頁、compare 判定的既有測試全部重跑通過。
+
+### 新發現（與 PR 無關，既有問題）
+
+- **收斂後的答案本身仍低於對比目標**：動畫瘋淺色、max-glass、該暗畫面下，右半導覽列
+  （序號兌換…APP）收斂後只有 **1.14:1**，目標 1.5:1；左半 3.8:1。右半項目的字色比左半淺，
+  推測 solver 假設的文字色比這些項目深（未驗證）。
 
 ### 已做（`faaca5d`，只動測試工具）
 
@@ -588,9 +628,16 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
         （數值與 base 相同）。兩種判讀情境都不完全符合，**交回分析**（細節見該資料夾 README）。
       - `ani/dark`（首次跑到）：**PASS**，兩邊 `state-current` 全部通過。
       - 第 2 輪：全部 PASS。整份 `verdicts.txt` 與所有 `result-*.json` 已存進同一資料夾。
-- [ ] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：判斷是 harness 的新求解步驟
-      造成，還是 PR 的變化（看 base 與 cand 的 `-fresh.png` 是否相同；必要時用舊 harness
-      重跑這格比較）
+- [ ] 用修正後的程式與 harness 再跑一次完整矩陣，確認：
+  - [ ] cand 所有凍結畫面 `state-current` 通過（含 `ani/light/max-glass/ani-battle/0`、`/2`）
+  - [ ] `ani/light/max-glass/ani-battle/0`、`/2`：cand 對 base（收斂後的 fresh）通過；
+        base 的 `state-current` WARN 仍會出現（main 尚未修正，屬預期）
+- [ ] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：兩邊 `state-current` 都通過、
+      三次量測相同 → 是 PR 造成的確定性差異，不是上面的缺陷。下一次執行的 FAIL 訊息會列出
+      哪個即時變數不同，據此判斷。候選（未驗證）：倒影改變了整張畫布的統計值，影響
+      ① `--lg-tint-rgb`（量化 8 階、spill 0.1，估計影響不到 1 個色階，可能性低），或
+      ② `--lg-glow-opacity`／`--lg-glow-lift`（淺色主題依 `lum` 而變；solid-glow 的 glow 很強，
+      延伸到頁首後方）
 - [ ] 判讀 `ani/light/max-glass/ani-battle/0@1201s`：
   - [ ] 若 **base** 的 `state-current` 為 WARN、凍結畫面比對 PASS → 證實是 main 既有缺陷
         （凍結後可讀性狀態過期），進行下一項
@@ -603,8 +650,11 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
 - [ ] cand 所有凍結畫面的 `state-current` 都通過（cand 若失敗即為本 PR 的問題）
       （2026-10-08：`ani/light/max-glass/ani-battle/2` cand 過期，Δ 0.82／3.30%，
       與 base 完全相同 → 疑為同一個 main 缺陷，PR 未改變；其餘已量的格子全部通過）
-- [ ] 若證實是 main 的缺陷：找出根因（先檢查上面兩個候選），另開 PR 修 main；修好後
-      本 PR 再對新的 main 跑一次，該格應無 WARN
+- [x] 若證實是 main 的缺陷：找出根因 → 已確認並在本分支修正（見「根因」「修正」）
+- [ ] 把 scrim 收斂修正另開 PR 修 main（`ambient.js` 的 `scrimGap`／`relaxRate` 兩處）；
+      main 修好後本 PR 再對新的 main 跑一次，base 不應再出現 `state-current` WARN
+- [ ] 動畫瘋右半導覽列收斂後低於對比目標（見「新發現」）：確認 solver 用的文字色與這些
+      項目的實際字色，必要時讓 solver 以頁首實際最淺的文字色求解
 - [ ] RAM 成長警告（`max-glass/ani-battle`，cand 4 次中 2 次，base 從未出現）：多跑幾輪看
       是否重現；若只在 cand 出現，比對 heap snapshot 找是否有每幀累積的配置
       （2026-10-08 state-current 完整矩陣：**沒有出現**任何 RAM 警告。累計 cand 5 次中 2 次）

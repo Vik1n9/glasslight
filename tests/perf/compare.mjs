@@ -228,7 +228,13 @@ for (const site of sites) {
         const n = noise[x.k], tm = Math.max(T.visualMean, n ? 1.5 * n.mean : 0), tp = Math.max(T.visualPct, n ? 1.5 * n.pct : 0);
         const bad = res[i].mean > tm || res[i].pct > tp;
         rows[`${x.k} r${x.round}`] = { 'mean Δ': f(res[i].mean), '% >24': f(res[i].pct), 'where x,y': res[i].box, 'noise mean Δ': n ? f(n.mean) : '-', verdict: bad ? 'DIFF' : 'same' };
-        if (bad) add('FAIL', `${tag}/${x.k} r${x.round}`, `frozen frame differs: mean Δ ${f(res[i].mean)} (limit ${f(tm)}), ${f(res[i].pct)}% pixels > 24 (limit ${f(tp)})`);
+        if (bad) {
+          // Which live value moved (run.mjs records them per still).
+          const entryOf = (r, k) => r && Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills)).find((st) => st.key === k);
+          const bv = entryOf(base.find((r) => r.round === x.round), x.k)?.vars || {}, cv = entryOf(cand.find((r) => r.round === x.round), x.k)?.vars || {};
+          const moved = [...new Set([...Object.keys(bv), ...Object.keys(cv)])].filter((v) => bv[v] !== cv[v]).map((v) => `${v} ${bv[v] ?? '-'} → ${cv[v] ?? '-'}`);
+          add('FAIL', `${tag}/${x.k} r${x.round}`, `frozen frame differs: mean Δ ${f(res[i].mean)} (limit ${f(tm)}), ${f(res[i].pct)}% pixels > 24 (limit ${f(tp)})${moved.length ? `; live values that differ: ${moved.join(', ')}` : Object.keys(bv).length ? '; live values identical' : ''}`);
+        }
       });
       if (Object.keys(rows).length) { console.log('\nfrozen frames, base vs cand:'); console.table(rows); }
     }

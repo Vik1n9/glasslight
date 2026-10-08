@@ -961,6 +961,15 @@
   let scrimRaf = 0;
   let scrimDark = null;
 
+  // Largest step the relaxing cells still have to go (solveScrimMap).
+  let scrimGap = 0;
+
+  // How far a tick relaxes the scrim and the glass tint towards a lighter
+  // need. Slow under moving footage, so a passing shadow doesn't pump the
+  // page; quick over a still picture (paused, a thumbnail), where there is
+  // nothing to smooth and the light should simply arrive.
+  const relaxRate = () => (videoLive() && !video.paused ? 0.15 : 0.5);
+
   function solveScrimMap(px, opacity, dark, cards) {
     // Per cell there is no page-wide worst case to hide model error behind
     // (glass shadows, the ¼ s between ticks, the drift): keep 5 % in hand,
@@ -983,6 +992,8 @@
     // Dilate by one cell: the drift animation and the bilinear stretch of
     // the map must never leave a bright spot under a lighter neighbour.
     // Then smooth asymmetrically: darken (safer) at once, relax slowly.
+    const relax = relaxRate();
+    scrimGap = 0;
     for (let y = 0; y < GRID_Y; y += 1) {
       for (let x = 0; x < GRID_X; x += 1) {
         let m = 0;
@@ -994,7 +1005,8 @@
           }
         }
         const c = y * GRID_X + x;
-        cellScrim[c] = m > cellScrim[c] ? m : cellScrim[c] + (m - cellScrim[c]) * 0.15;
+        cellScrim[c] = m > cellScrim[c] ? m : cellScrim[c] + (m - cellScrim[c]) * relax;
+        scrimGap = Math.max(scrimGap, cellScrim[c] - m);
       }
     }
   }
@@ -1143,9 +1155,14 @@
     const gpx = lastGlowPx || px;
     const floor = mastheadFloor(px, gpx, opacity, glowOpacity, dark, scrimShown);
     const glass = floor > 0 ? Math.min(0.92, floor + 0.08) : 0;
-    glassAlpha = glass > glassAlpha ? glass : glassAlpha + (glass - glassAlpha) * 0.15;
-    // Converged once the quantized value (1/50 steps) can no longer move.
-    settled = Math.abs(glass - glassAlpha) < 0.005;
+    glassAlpha = glass > glassAlpha ? glass : glassAlpha + (glass - glassAlpha) * relaxRate();
+    // Converged once the quantized tint (1/50 steps) can no longer move and the
+    // scrim map has relaxed to what this picture needs (paintScrim ignores
+    // smaller steps). The scrim relaxes at the same rate as the tint, so it
+    // often still had far to go when the tint arrived: a paused frame then
+    // kept the scrim of the picture before it, by an amount that depended on
+    // timing.
+    settled = Math.abs(glass - glassAlpha) < 0.005 && scrimGap < 0.004;
 
     // Read layout before any write below: a write followed by a layout read
     // forces a synchronous style recalc (~50 ms on YouTube's DOM).

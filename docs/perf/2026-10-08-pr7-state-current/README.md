@@ -44,3 +44,30 @@ Display 2560x1440 HDR, signed in, `caffeinate -d`. The harness closed the option
 
 - `yt4k/light` Δ 2.25 came out with the same value in three measurements: the debug run, its `--resume`, and this run. It reproduces. It sits in the masthead only, and `state-current` held on both sides.
 - **No RAM warnings anywhere in this run.** The earlier "RAM grew over the window (leak?)" on `max-glass/ani-battle` and the `yt/light/solid-glow` ×1.16 did not come back.
+
+## Analysis (follow-up)
+
+Root cause found and reproduced off the machine; the full write-up is in TODO.md → "PR #7 效能測試：待驗證" → 根因 / 修正.
+
+**The two header states swap builds between runs.**
+
+| | right-nav contrast | header mean |
+|---|---|---|
+| A (faint, converged) | 1.14–1.15 | about 57 |
+| B (legible, stale) | 3.47–3.55 | about 134–140 |
+
+The first run had base = A and cand = B. This run had base = B and cand = A. Which one a build lands on depends on timing.
+
+**Mechanism.** The scrim relaxes 15 % per tick, but `settled` only waits for the glass tint. Once the tint converges, `tick()` stops, and the scrim freezes partway.
+- A forced tick resumes it only until the tint settles again. That is why base-fresh lands in between (1.55).
+- The off-machine repro gives the same numbers on main and on the PR.
+- This explains both frame 0 (cand converged vs base-fresh only half way) and frame 2 (stale on both sides, same numbers).
+
+**Fixed on the branch.** `settled` now also waits for the scrim, and still pictures relax at 50 % per tick.
+
+**Harness changes.**
+- 4 forced ticks before judging whether a frame is stale.
+- When stale, keep ticking until converged.
+- Per-still live values, so the next run names what differs on `yt4k/light/solid-glow/0` (Δ 2.25, unexplained).
+
+**New, pre-existing.** Even converged, the right-hand 動畫瘋 nav items sit at 1.14:1, under max-glass's 1.5:1.

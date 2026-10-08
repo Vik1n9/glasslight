@@ -413,6 +413,12 @@ for (const name of presetNames) {
       fs.writeFileSync(path.join(out, file), pair[1]);
       const vr = await page.evaluate((s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return r ? `${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}` : null; }, VSEL);
       const entry = { key: `${name}/${clip.name}/${i}@${t}s`, file, stable, video: vr }; // where the video sat in this very shot: compare.mjs masks it
+      // The live values behind this frame (light layer and glass), so a frozen
+      // difference can name the one that moved: compare.mjs prints them.
+      entry.vars = await page.evaluate(() => {
+        const pick = (st) => (st ? Object.fromEntries([...st].filter((p) => p.startsWith('--lg')).map((p) => [p, st.getPropertyValue(p).trim()])) : {});
+        return { ...pick(document.getElementById('lg-ambient')?.style), ...pick(document.getElementById('lg-live-vars')?.sheet?.cssRules?.[0]?.style) };
+      });
       if (!stable) { // keep both shots: compare.mjs prints where they differ
         entry.pair = [file.replace('.png', '-a.png'), file.replace('.png', '-b.png')];
         pair.forEach((buf, k) => fs.writeFileSync(path.join(out, entry.pair[k]), buf));
@@ -420,20 +426,41 @@ for (const name of presetNames) {
       // Is the frozen frame the extension's own current answer? A settled still
       // can still hold a legibility state (scrim, glass tint) solved for an
       // earlier picture: shot after shot is identical, yet a fresh sample would
-      // change it. Force one (LG.ambient.tick: re-read the canvas, re-solve, as a
-      // theme switch does) and shoot again. A difference fails this run's
+      // change it. Force a few (LG.ambient.tick: re-read the canvas, re-solve,
+      // as a theme switch does) and shoot again. A difference fails this run's
       // `state-current` check, and compare.mjs then judges the other build
       // against this fresh frame rather than the stale one.
-      if (stable && (await inExtension('(LG.ambient.tick(), true)')) === true) {
-        await sleep(1200); // two stats ticks and the 240 ms scrim ease
-        const fresh = await page.screenshot({ clip: cfg.region });
-        const d = await shotDiff(pair[1], fresh);
+      // Four forced ticks, not one: a build that stops relaxing early moves
+      // only 15 % of the way per tick, too little to show on a small gap.
+      let forced = false;
+      for (let j = 0; j < 4; j++) {
+        forced = (await inExtension('(LG.ambient.tick(), true)')) === true || forced;
+        await sleep(300);
+      }
+      if (stable && forced) {
+        await sleep(300); // the 240 ms scrim ease
+        let fresh = await page.screenshot({ clip: cfg.region });
+        let d = await shotDiff(pair[1], fresh);
         entry.current = d.mean <= THRESHOLDS.visualMean && d.pct <= THRESHOLDS.visualPct;
-        entry.freshDiff = { mean: +d.mean.toFixed(2), pct: +d.pct.toFixed(2) };
         if (!entry.current) {
+          // Stale: keep it ticking until the frame stops moving, so the fresh
+          // frame is the converged answer. A build that stops relaxing early
+          // (main before the scrim-settle fix) gets one step per forced tick.
+          for (let k = 0; k < 10; k++) {
+            for (let j = 0; j < 4; j++) {
+              await inExtension('(LG.ambient.tick(), true)');
+              await sleep(250);
+            }
+            const next = await page.screenshot({ clip: cfg.region });
+            const done = await nearlyIdentical(fresh, next);
+            fresh = next;
+            if (done) break;
+          }
+          d = await shotDiff(pair[1], fresh);
           entry.fresh = file.replace('.png', '-fresh.png');
           fs.writeFileSync(path.join(out, entry.fresh), fresh);
         }
+        entry.freshDiff = { mean: +d.mean.toFixed(2), pct: +d.pct.toFixed(2) };
         check(`${name}/${clip.name}/${i}:state-current`, entry.current, entry.current ? 'a fresh solve leaves the frame as is' : `a fresh sample + solve changed the frame (mean Δ ${d.mean.toFixed(2)}, ${d.pct.toFixed(2)}% px > 8): the frozen legibility state was stale`);
       }
       r.stills.push(entry);
