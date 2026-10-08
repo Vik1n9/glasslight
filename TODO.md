@@ -570,6 +570,21 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
 
 - [ ] 在本機重跑完整 debug suite（harness 指紋已變，base 快取會重建）：
       `caffeinate -d -i -u node tests/perf/suite.mjs --debug --base origin/main --cand HEAD --window 0,0`
+      - 進度（2026-10-08 12:00 起，`a4b337a`，harness 含 `state-current`）：
+        - `yt/light`、`yt/dark`：PASS。
+        - `yt4k/light`：debug 停在 `solid-glow/yt4k-heavy/0@36s`，凍結畫面 mean Δ 2.25
+          （門檻 2）、0% 像素 > 24；`--resume` 重量 cand 後**數值完全相同**，所以可重現，
+          不是雜訊。差異只在頁首（masthead），很淡。兩邊 9 張凍結畫面的
+          `state-current` 全部通過。舊 harness（`f707717`）下這格是 PASS，原因可能是新的
+          強制重新求解，也可能是 PR 的微小變化，**尚未判斷**。
+        - debug 模式卡在這格就到不了動畫瘋，所以 12:30 左右改跑**非 debug 完整矩陣**
+          （同一個 `--out`，結果在本機 `/private/tmp/claude-501/lg-perf5/`），
+          讓 `ani/light/max-glass/ani-battle` 和其他格都有結果。
+      - 下一步：完整矩陣跑完後，依下面兩項判讀，並把 `verdicts.txt` 與相關 `result-*.json`
+        存進 `docs/perf/`，再勾選本項。
+- [ ] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：判斷是 harness 的新求解步驟
+      造成，還是 PR 的變化（看 base 與 cand 的 `-fresh.png` 是否相同；必要時用舊 harness
+      重跑這格比較）
 - [ ] 判讀 `ani/light/max-glass/ani-battle/0@1201s`：
   - [ ] 若 **base** 的 `state-current` 為 WARN、凍結畫面比對 PASS → 證實是 main 既有缺陷
         （凍結後可讀性狀態過期），進行下一項
