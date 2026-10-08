@@ -195,16 +195,22 @@ for (const site of sites) {
       const keep = SITES[site]?.stillKeepBottom ?? 0;
       const maskOf = (r, k) => { const st = Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills)).find((x) => x.key === k); const m = /^(-?\d+),(-?\d+) (\d+)x(\d+)$/.exec(st?.video || r.ready?.layout?.video || ''); return m ? { x: +m[1], y: +m[2], w: +m[3], h: Math.max(0, +m[4] - keep) } : null; };
       const stills = (r) => Object.fromEntries(Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills.filter((s) => s.stable !== false).map((s) => [s.key, s.file]))));
+      // The baseline as reference: where its frozen frame held a stale
+      // legibility state (a fresh solve changed it: run.mjs `state-current`),
+      // the candidate is judged against that fresh frame instead, so the
+      // baseline's own defect is reported as such and not as a difference.
+      const reference = (r) => Object.fromEntries(Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills.filter((s) => s.stable !== false).map((s) => [s.key, s.current === false && s.fresh ? s.fresh : s.file]))));
+      for (const br of base) for (const p of Object.values(br.presets)) for (const c of Object.values(p.clips)) for (const st of c.stills) if (st.current === false && st.fresh) add('WARN', `${tag}/${st.key} r${br.round}`, `baseline frozen frame was stale (a fresh solve changed it: mean Δ ${f(st.freshDiff.mean)}); the candidate is judged against the fresh frame`);
       const pairs = [], meta = [];
       for (const cr of cand) {
         const br = base.find((r) => r.round === cr.round);
         if (!br) continue;
-        const bs = stills(br), cs = stills(cr);
+        const bs = reference(br), cs = stills(cr);
         for (const k of Object.keys(cs)) if (bs[k]) { pairs.push([bs[k], cs[k]]); meta.push({ k, round: cr.round, kind: 'cand' }); }
         for (let j = pairs.length - Object.keys(cs).filter((k) => bs[k]).length; j < pairs.length; j++) pairs[j][2] = maskOf(br, meta[j].k);
       }
       if (base.length > 1) {
-        const a = stills(base[0]), b2 = stills(base[1]);
+        const a = reference(base[0]), b2 = reference(base[1]);
         for (const k of Object.keys(a)) if (b2[k]) { pairs.push([a[k], b2[k], maskOf(base[0], k)]); meta.push({ k, kind: 'noise' }); }
       }
       // stills that never settled: show where their two shots differ

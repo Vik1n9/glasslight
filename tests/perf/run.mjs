@@ -159,8 +159,8 @@ const visible = () => page.evaluate(() => document.visibilityState === 'visible'
 // Two shots of a frozen frame never match byte for byte (decoder dithering, GPU
 // rounding). They are "the same" when the mean difference is invisible and next
 // to no pixel moved by more than 8 levels.
-const nearlyIdentical = async (a, b) => {
-  const d = await page.evaluate(async ([x, y]) => {
+const shotDiff = (a, b) =>
+  page.evaluate(async ([x, y]) => {
     const decode = async (b64) => { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const bmp = await createImageBitmap(new Blob([u], { type: 'image/png' })); const c = new OffscreenCanvas(bmp.width, bmp.height); const g = c.getContext('2d'); g.drawImage(bmp, 0, 0); return g.getImageData(0, 0, bmp.width, bmp.height).data; };
     const A = await decode(x), B = await decode(y);
     if (A.length !== B.length) return { mean: 255, pct: 100 };
@@ -168,6 +168,8 @@ const nearlyIdentical = async (a, b) => {
     for (let i = 0; i < A.length; i += 4) { const e = (Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])) / 3; sum += e; if (e > 8) over++; }
     return { mean: sum / (A.length / 4), pct: (100 * over) / (A.length / 4) };
   }, [a.toString('base64'), b.toString('base64')]);
+const nearlyIdentical = async (a, b) => {
+  const d = await shotDiff(a, b);
   return d.mean <= THRESHOLDS.stillMean && d.pct <= THRESHOLDS.stillPct;
 };
 
@@ -291,13 +293,19 @@ const isolated = [];
 cdp.on('Runtime.executionContextCreated', ({ context }) => { if (context.auxData?.type === 'isolated' && context.origin.startsWith('chrome-extension://')) isolated.push(context.id); });
 cdp.on('Runtime.executionContextsCleared', () => { isolated.length = 0; });
 await cdp.send('Runtime.enable');
-async function setStorage(values) {
+// Evaluate in the extension's content-script world of the top frame (where LG
+// lives); undefined when it can't be reached.
+async function inExtension(expression) {
   for (const id of [...isolated].reverse()) {
     const top = await cdp.send('Runtime.evaluate', { contextId: id, expression: 'window === window.top', returnByValue: true }).catch(() => null);
     if (!top?.result?.value) continue;
-    const r = await cdp.send('Runtime.evaluate', { contextId: id, expression: `chrome.storage.sync.set(${JSON.stringify(values)}).then(() => true)`, awaitPromise: true, returnByValue: true });
-    if (r.result?.value === true) return;
+    const r = await cdp.send('Runtime.evaluate', { contextId: id, expression, awaitPromise: true, returnByValue: true }).catch(() => null);
+    if (r && !r.exceptionDetails && r.result?.value !== undefined) return r.result.value;
   }
+  return undefined;
+}
+async function setStorage(values) {
+  if ((await inExtension(`chrome.storage.sync.set(${JSON.stringify(values)}).then(() => true)`)) === true) return;
   throw new Error('could not reach the extension content script to set storage');
 }
 async function applyPreset(name) {
@@ -408,6 +416,25 @@ for (const name of presetNames) {
       if (!stable) { // keep both shots: compare.mjs prints where they differ
         entry.pair = [file.replace('.png', '-a.png'), file.replace('.png', '-b.png')];
         pair.forEach((buf, k) => fs.writeFileSync(path.join(out, entry.pair[k]), buf));
+      }
+      // Is the frozen frame the extension's own current answer? A settled still
+      // can still hold a legibility state (scrim, glass tint) solved for an
+      // earlier picture: shot after shot is identical, yet a fresh sample would
+      // change it. Force one (LG.ambient.tick: re-read the canvas, re-solve, as a
+      // theme switch does) and shoot again. A difference fails this run's
+      // `state-current` check, and compare.mjs then judges the other build
+      // against this fresh frame rather than the stale one.
+      if (stable && (await inExtension('(LG.ambient.tick(), true)')) === true) {
+        await sleep(1200); // two stats ticks and the 240 ms scrim ease
+        const fresh = await page.screenshot({ clip: cfg.region });
+        const d = await shotDiff(pair[1], fresh);
+        entry.current = d.mean <= THRESHOLDS.visualMean && d.pct <= THRESHOLDS.visualPct;
+        entry.freshDiff = { mean: +d.mean.toFixed(2), pct: +d.pct.toFixed(2) };
+        if (!entry.current) {
+          entry.fresh = file.replace('.png', '-fresh.png');
+          fs.writeFileSync(path.join(out, entry.fresh), fresh);
+        }
+        check(`${name}/${clip.name}/${i}:state-current`, entry.current, entry.current ? 'a fresh solve leaves the frame as is' : `a fresh sample + solve changed the frame (mean Δ ${d.mean.toFixed(2)}, ${d.pct.toFixed(2)}% px > 8): the frozen legibility state was stale`);
       }
       r.stills.push(entry);
       check(`${name}/${clip.name}/${i}:still-stable`, stable, `frame at ${t}s ${stable ? 'settled' : 'kept changing'}`);

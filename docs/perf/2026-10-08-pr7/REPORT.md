@@ -59,3 +59,57 @@ When nobody is at the machine, the display sleeps after `displaysleep` minutes. 
 - `frames/` has the top 180 px of the `max-glass/ani-battle` frozen frames 0 and 1, with base on top and cand below. Full-frame stills are not committed: they are screenshots of signed-in pages.
 
 To re-run: `caffeinate -d -i -u node tests/perf/suite.mjs --debug --base origin/main --cand HEAD --window 0,0`
+
+### Follow-up: what the `max-glass/ani-battle` frame-0 difference is
+
+Measured from `frames/ani-light-max-glass-ani-battle-0-header-base-over-cand.png`:
+
+- **The backdrop behind the header is the same in both builds.** Cand equals base with a uniform white overlay. Per region, `a = (cand − base) / (255 − base)`:
+
+  | region | base mean | cand mean | a (p10 / median / p90) |
+  |---|---|---|---|
+  | logo row, left | 84 | 151 | 0.26 / 0.43 / 0.45 |
+  | logo row, right | 58 | 140 | 0.41 / 0.42 / 0.43 |
+  | nav row, right | 55 | 131 | 0.21 / 0.42 / 0.43 |
+  | gap between the two bars | 104 | 161 | 0.24 / 0.37 / 0.44 |
+
+  A constant `a` across regions of different brightness means only the overlay differs, not the picture under it. So:
+  - This is not the reflection: the compared region ends at y 710, where the video ends.
+  - It is not a different video frame.
+  - It is not the tint spill: `--lg-spill` is about 0.06 at max-glass.
+  - The overlay also covers the gap between the bars, outside any glass, so it is the legibility layer: the scrim map, plus the glass floor.
+- **Base is the build that misses its own target.** max-glass asks for 1.5:1 text contrast. Nav text (`序號兌換 … APP`) against what is behind it:
+
+  | build | contrast |
+  |---|---|
+  | base | **1.15:1** (below target) |
+  | cand | 3.55:1 |
+
+  Cand's overlay is what the target requires for that backdrop. Base's frozen state was solved for a brighter picture than the one shown, so it is stale.
+- **Why base goes stale here is not established.** It could not be reproduced off the machine: ani.gamer.com.tw answers 403 from the sandbox, and software decoding there shows no seek race. The code paths that differ between the builds touch neither the header's scrim cells nor the masthead solve.
+
+#### Harness change, to settle it on the next run
+
+`run.mjs`, for every settled still:
+1. Force a fresh sample and solve (`LG.ambient.tick()`, run in the content-script world, the same as a theme switch does).
+2. Shoot again 1.2 s later.
+
+If the frame changes, the frozen legibility state was stale:
+- the run's `state-current` check fails (FAIL for cand, WARN for base);
+- the fresh shot is kept as `-fresh.png`.
+
+`compare.mjs` then judges cand against the baseline's fresh frame where the baseline was stale, and lists the baseline's staleness as a WARN. Where the baseline is current, nothing changes, and a real cand difference still fails.
+
+Checked off the machine:
+- **compare.mjs**, fed this report's two header crops:
+  - the old data still fails;
+  - "base stale, fresh = cand" passes with the warning;
+  - "base current, cand different" still fails.
+- **The forced solve, on a page served as youtube.com with the unpacked extension**:
+  - it is reachable;
+  - a correct frozen state changes by Δ 0–0.28, so there are no false alarms.
+
+The harness fingerprint changes, so the base cache is rebuilt. No targeted suite has `ani/light` × `max-glass` × `ani-battle`; only `full` covers it. Re-run with the same command as above:
+`caffeinate -d -i -u node tests/perf/suite.mjs --debug --base origin/main --cand HEAD --window 0,0`
+
+The RAM growth warning on the same cell (2 of 4 cand runs) is still open. It is a soft gate, and these runs do not say whether it comes from the build.
