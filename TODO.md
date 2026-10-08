@@ -8,6 +8,11 @@
 3. 設定頁（options page）＋抖內按鈕（已實作；抖內為測試連結，待接 TapPay）
 4. PR #7 效能測試未通過項目的驗證（見下方「PR #7 效能測試：待驗證」）
 
+2026-10-08 本機效能測試（`tests/perf/suite.mjs --debug` 對 `main`）：YouTube 四格通過，
+動畫瘋 `ani/light` 的 `max-glass/ani-battle` 未過，`ani/dark` 與第 2 輪未跑到。
+完整報告與原始結果在 [`docs/perf/2026-10-08-pr7/`](docs/perf/2026-10-08-pr7/REPORT.md)；
+待查事項見下方「效能測試發現」。
+
 ---
 
 # 已完成：ani.gamer.com.tw 支援（分支 `feat/ani-gamer`）
@@ -122,6 +127,24 @@
 - [ ] `radial` / `enlarged` 兩種 backdrop 無退步（程式路徑未改動）
 - [ ] 淺色主題：0.7 的暗化在淺色頁面上是否像陰影；若不自然再調 `REFL_DIM`
 - [ ] `tests/perf/suite.mjs` 對 `main` 比較，無效能退步
+      （2026-10-08：YouTube 4 格通過；`ani/light` 未過，見下節；`ani/dark`、第 2 輪未跑到）
+
+### 效能測試發現（2026-10-08，報告：`docs/perf/2026-10-08-pr7/REPORT.md`）
+
+- [x] 測試腳本隔離與畫面無關的分頁：設定頁首次安裝會自動開啟，而每次測試都是新 profile，
+      cand 因此多一個 renderer，RAM 被算成 cand 的成本（動畫瘋 6 組設定 ×1.2）。
+      `run.mjs` 改以 targetId 認出測試分頁、關掉其他分頁並記錄在 `result.strayPages`。
+      隔離後 ×1.2 的 RAM 警告消失。
+- [ ] `max-glass/ani-battle` 場景切換後（frame 0 @1201s），動畫瘋頂欄後方的環境光與
+      `main` 不同（cand 4 次中 3 次 Δ≈31；畫面與播放器 Δ≈0）。`main` 仍是上一幕的暗色，
+      cand 已跟上新畫面。**待判斷是否為預期行為**：是 → 該片段的凍結畫面改在切換後
+      留足夠穩定時間或換擷取點；不是 → 找出 max-glass 路徑在切換時的差異。
+- [ ] 同一格「量測期間 RAM 持續上升（leak?）」警告（cand 4 次中 2 次，含隔離後；
+      `main` 未出現）。查 max-glass 路徑在高動態片段是否有保留畫面或畫布。
+- [ ] 補跑 `ani/dark` 與第 2 輪（除錯模式停在 `ani/light`，需上面兩項有結論）
+- [x] 無人在場時螢幕睡眠會讓 Chromium 停止繪製、動畫瘋格子卡在 `waitPlayable`；
+      以 `caffeinate -d -i -u node tests/perf/suite.mjs …` 執行即可。可考慮讓 `suite.mjs`
+      自己持有不睡眠的 assertion。
 
 ## 靜態模式（Static backdrop）
 
@@ -260,7 +283,8 @@
   96% 不透明、環境光約 1/4）。說明中引用的選項名稱都對齊各語系實際標籤。
 - popup：改用共用模組，新增「所有設定與說明」（`openOptionsPage()` 後
   `window.close()`）與儲存狀態；保留原本的 Reset。
-- `background.js`：首次安裝開一次設定頁。
+- `background.js`：首次安裝開一次設定頁。效能測試每次都用新 profile，所以每次都會
+  觸發；`tests/perf/run.mjs` 會關掉這類非測試分頁（`result.strayPages`），不影響量測。
 - `scripts/build.py`：驗證 `options_ui` 檔案存在、6 語系說明檔齊全且鍵相同、
   `DONATE_URL` 不是測試連結。
 
