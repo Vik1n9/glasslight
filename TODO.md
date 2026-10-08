@@ -6,6 +6,7 @@
 1. 影片下方的延伸：拉伸 → 倒影（已實作，待真實網站驗收）
 2. 靜態模式（Static backdrop）（已實作，待真實網站驗收）
 3. 設定頁（options page）＋抖內按鈕（已實作；抖內為測試連結，待接 TapPay）
+4. PR #7 效能測試未通過項目的驗證（見下方「PR #7 效能測試：待驗證」）
 
 ---
 
@@ -498,6 +499,55 @@ Apple Pay / Google Pay 無法在 `chrome-extension://` 頁面內執行，這是�
 - [x] Reset 只出現在進階區，不在主頁（popup 仍保留原本的 Reset）
 - [x] 鍵盤可完整操作（Tab 順序、Space 切換 toggle）
 - [x] 連續拖曳任一滑桿不會觸發 `storage.sync` 配額錯誤，且有「已儲存」提示
+
+## PR #7 效能測試：待驗證
+
+狀態：2026-10-08 本機跑 `tests/perf/suite.mjs --debug`（22fe5fc 對 main），結果在
+`docs/perf/2026-10-08-pr7/`。YouTube 四格 PASS；**ani/light 在
+`max-glass/ani-battle` 第 0 張凍結畫面 FAIL**（頁首 mean Δ 31）；ani/dark 與第 2 輪沒跑到。
+
+### 目前已知（事實）
+
+- 兩邊頁首**背後的畫面相同**：cand ＝ base 均勻疊上一層白（各區 a ≈ 0.42，連兩條玻璃之間
+  也有）。差的是可讀性狀態（scrim／玻璃底色），不是畫面、不是倒影（比對範圍止於 y 710，
+  影片底邊在 709）。
+- **未達對比目標的是 base**：max-glass 目標 1.5:1，base 右半導覽列文字 **1.15:1**，
+  cand 3.55:1。
+- 為什麼 base 停在過期狀態：**未確認**。沙箱連不到動畫瘋（403），軟體解碼也重現不出
+  跳轉競態；兩版有差異的程式路徑都碰不到頁首的 scrim 格與 masthead 求解。
+
+### 推論（未驗證）
+
+- 候選一：暫停＋跳轉之後，最後一次取樣與求解用的畫面和最後顯示的畫面不同。
+- 候選二：scrim 的 240 ms 漸變只靠 `requestAnimationFrame` 推進；若當時 rAF 沒有執行
+  （例如視窗被遮或螢幕休眠），畫面上的 scrim 會停在舊值，而 `tick()` 在 settled 後提早
+  返回、不再重畫。
+
+### 已做（`faaca5d`，只動測試工具）
+
+凍結畫面穩定後強制重新取樣求解（`LG.ambient.tick()`）再拍一張：畫面改變即
+`state-current` 失敗（cand FAIL、base WARN），存 `-fresh.png`；base 過期時 cand 改與
+base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「狀態正確時不誤報」（Δ 0–0.28）。
+
+### 待驗證
+
+- [ ] 在本機重跑完整 debug suite（harness 指紋已變，base 快取會重建）：
+      `caffeinate -d -i -u node tests/perf/suite.mjs --debug --base origin/main --cand HEAD --window 0,0`
+- [ ] 判讀 `ani/light/max-glass/ani-battle/0@1201s`：
+  - [ ] 若 **base** 的 `state-current` 為 WARN、凍結畫面比對 PASS → 證實是 main 既有缺陷
+        （凍結後可讀性狀態過期），進行下一項
+  - [ ] 若 base `state-current` 正常但仍 DIFF → 上面的推論錯誤，差異是 PR 造成的，
+        把新結果（含 `-fresh.png`）交回重查
+- [ ] cand 所有凍結畫面的 `state-current` 都通過（cand 若失敗即為本 PR 的問題）
+- [ ] 若證實是 main 的缺陷：找出根因（先檢查上面兩個候選），另開 PR 修 main；修好後
+      本 PR 再對新的 main 跑一次，該格應無 WARN
+- [ ] RAM 成長警告（`max-glass/ani-battle`，cand 4 次中 2 次，base 從未出現）：多跑幾輪看
+      是否重現；若只在 cand 出現，比對 heap snapshot 找是否有每幀累積的配置
+- [ ] `yt/light/solid-glow` RAM ×1.16 警告：觀察是否重現（軟門檻）
+- [ ] ani/dark 與第 2 輪：跑完
+- [ ] harness 不涵蓋的部分手動檢查：縮圖光（首頁、搜尋、頻道頁）、popup 與設定頁 UI
+- [ ] （可選）`suite.mjs` 自己保持螢幕不休眠，不必依賴外部 `caffeinate`
+      （報告：螢幕休眠時 Chromium 停止繪製，動畫瘋那格卡在 `waitPlayable` 2 小時）
 
 ## 已知缺口 / 後續
 
