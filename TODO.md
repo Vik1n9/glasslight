@@ -629,6 +629,9 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
       - `ani/dark`（首次跑到）：**PASS**，兩邊 `state-current` 全部通過。
       - 第 2 輪：全部 PASS。整份 `verdicts.txt` 與所有 `result-*.json` 已存進同一資料夾。
 - [ ] 用修正後的程式與 harness 再跑一次完整矩陣，確認：
+      （進行中：2026-10-08 22:56 +0800 起在本機跑，HEAD=`5bdde36`，harness 指紋 `f71efff1c3`，
+      非 debug、兩輪、約 54 分鐘；本機輸出 `/private/tmp/claude-501/lg-perf6/`。完成後存進
+      `docs/perf/2026-10-08-pr7-scrim-fix/`，不覆蓋 `2026-10-08-pr7-state-current/`（那份是修正前）。）
   - [ ] cand 所有凍結畫面 `state-current` 通過（含 `ani/light/max-glass/ani-battle/0`、`/2`）
   - [ ] `ani/light/max-glass/ani-battle/0`、`/2`：cand 對 base（收斂後的 fresh）通過；
         base 的 `state-current` WARN 仍會出現（main 尚未修正，屬預期）
