@@ -628,14 +628,23 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
         （數值與 base 相同）。兩種判讀情境都不完全符合，**交回分析**（細節見該資料夾 README）。
       - `ani/dark`（首次跑到）：**PASS**，兩邊 `state-current` 全部通過。
       - 第 2 輪：全部 PASS。整份 `verdicts.txt` 與所有 `result-*.json` 已存進同一資料夾。
-- [ ] 用修正後的程式與 harness 再跑一次完整矩陣，確認：
-      （進行中：2026-10-08 22:56 +0800 起在本機跑，HEAD=`5bdde36`，harness 指紋 `f71efff1c3`，
-      非 debug、兩輪、約 54 分鐘；本機輸出 `/private/tmp/claude-501/lg-perf6/`。完成後存進
-      `docs/perf/2026-10-08-pr7-scrim-fix/`，不覆蓋 `2026-10-08-pr7-state-current/`（那份是修正前）。）
-  - [ ] cand 所有凍結畫面 `state-current` 通過（含 `ani/light/max-glass/ani-battle/0`、`/2`）
-  - [ ] `ani/light/max-glass/ani-battle/0`、`/2`：cand 對 base（收斂後的 fresh）通過；
+- [x] 用修正後的程式與 harness 再跑一次完整矩陣，確認：
+      （2026-10-08 22:56 +0800 跑完，63.9 分鐘，harness `f71efff1c3`，程式＝`5bdde36`；
+      結果 `docs/perf/2026-10-08-pr7-scrim-fix/`。總判定 FAIL 4／WARN 4，細節見下兩項與該 README）
+  - [x] cand 所有凍結畫面 `state-current` 通過（含 `ani/light/max-glass/ani-battle/0`、`/2`）
+        （24 份 cand 結果全部 0 個過期）
+  - [x] `ani/light/max-glass/ani-battle/0`、`/2`：cand 對 base（收斂後的 fresh）通過；
         base 的 `state-current` WARN 仍會出現（main 尚未修正，屬預期）
-- [ ] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：兩邊 `state-current` 都通過、
+        （第 0 張 Δ 7.73 → 0.32、第 2 張 Δ 3.23 → 0.44，皆 same；base 仍過期 Δ 8.27／6.25）
+- [ ] 修正後新出現的 4 個凍結畫面 FAIL（都附了不同的即時變數，base 的 `state-current` 都通過）：
+  - `ani/light/solid-glow/ani-battle/2` r1：Δ 3.46、4.59% > 24（頁首左半），
+    `--lg-glass-live 0.32 → 0.00`、`--lg-tint-rgb 120 32 8 → 112 32 8` ← **最明確的一個**
+  - `ani/light/max-glass/ani-battle/1` r1：Δ 2.16、0%，`--lg-glass-live 0.16 → 0.20`
+  - `yt4k/light/default/yt4k-heavy/1` r2：Δ 2.15、0%（雜訊 1.11），`--lg-glass-live 0.60 → 0.58`
+  - `ani/dark/default/ani-white/0` r2：Δ 2.32（門檻 2.08）、0%（雜訊 1.39），`--lg-tint-rgb 128 104 104 → 128 112 112`
+  - 候選（未驗證）：靜止畫面改為每 tick 放鬆 50%，玻璃底色與量化色階停在和 main 不同的位置
+- [x] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：（2026-10-08 修正後重跑：**Δ 0.22，same**，
+      差異消失；最可能是同一個 scrim 放鬆到一半的問題，屬推論）兩邊 `state-current` 都通過、
       三次量測相同 → 是 PR 造成的確定性差異，不是上面的缺陷。下一次執行的 FAIL 訊息會列出
       哪個即時變數不同，據此判斷。候選（未驗證）：倒影改變了整張畫布的統計值，影響
       ① `--lg-tint-rgb`（量化 8 階、spill 0.1，估計影響不到 1 個色階，可能性低），或
@@ -660,7 +669,7 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
       項目的實際字色，必要時讓 solver 以頁首實際最淺的文字色求解
 - [ ] RAM 成長警告（`max-glass/ani-battle`，cand 4 次中 2 次，base 從未出現）：多跑幾輪看
       是否重現；若只在 cand 出現，比對 heap snapshot 找是否有每幀累積的配置
-      （2026-10-08 state-current 完整矩陣：**沒有出現**任何 RAM 警告。累計 cand 5 次中 2 次）
+      （2026-10-08 state-current 完整矩陣、scrim 修正後完整矩陣：都**沒有出現**任何 RAM 警告。累計 cand 6 次中 2 次）
 - [x] `yt/light/solid-glow` RAM ×1.16 警告：觀察是否重現（軟門檻）
       （2026-10-08 state-current 完整矩陣兩輪都未重現）
 - [x] ani/dark 與第 2 輪：跑完（2026-10-08：ani/dark PASS；第 2 輪全 PASS）
