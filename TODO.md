@@ -580,8 +580,12 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
         - debug 模式卡在這格就到不了動畫瘋，所以 12:30 左右改跑**非 debug 完整矩陣**
           （同一個 `--out`，結果在本機 `/private/tmp/claude-501/lg-perf5/`），
           讓 `ani/light/max-glass/ani-battle` 和其他格都有結果。
-      - 下一步：完整矩陣跑完後，依下面兩項判讀，並把 `verdicts.txt` 與相關 `result-*.json`
-        存進 `docs/perf/`，再勾選本項。
+      - **`ani/light` 已有結果**（非 debug 完整矩陣，`docs/perf/2026-10-08-pr7-state-current/`）：
+        base 在 `max-glass/ani-battle` 0、2 兩張 `state-current` 過期 → main 缺陷**確認**；
+        但 cand 第 0 張對 base 的 fresh 畫面仍 FAIL（Δ 7.73），且 cand 第 2 張也過期
+        （數值與 base 相同）。兩種判讀情境都不完全符合，**交回分析**（細節見該資料夾 README）。
+      - 下一步：等完整矩陣跑完（`ani/dark`、第 2 輪），把整份 `verdicts.txt` 補進同一資料夾，
+        再勾選本項。
 - [ ] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：判斷是 harness 的新求解步驟
       造成，還是 PR 的變化（看 base 與 cand 的 `-fresh.png` 是否相同；必要時用舊 harness
       重跑這格比較）
@@ -590,7 +594,13 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
         （凍結後可讀性狀態過期），進行下一項
   - [ ] 若 base `state-current` 正常但仍 DIFF → 上面的推論錯誤，差異是 PR 造成的，
         把新結果（含 `-fresh.png`）交回重查
+  - 2026-10-08 結果：base `state-current` **WARN**（Δ 5.71），但 cand 對 base fresh 畫面
+    **仍 FAIL**（Δ 7.73）→ 第三種情況：main 缺陷存在，另外還有未解釋的差異（cand 的導覽列
+    比 base fresh 更淡，且 cand 自己的 fresh solve 不改變它）。資料：
+    `docs/perf/2026-10-08-pr7-state-current/`。
 - [ ] cand 所有凍結畫面的 `state-current` 都通過（cand 若失敗即為本 PR 的問題）
+      （2026-10-08：`ani/light/max-glass/ani-battle/2` cand 過期，Δ 0.82／3.30%，
+      與 base 完全相同 → 疑為同一個 main 缺陷，PR 未改變；其餘已量的格子全部通過）
 - [ ] 若證實是 main 的缺陷：找出根因（先檢查上面兩個候選），另開 PR 修 main；修好後
       本 PR 再對新的 main 跑一次，該格應無 WARN
 - [ ] RAM 成長警告（`max-glass/ani-battle`，cand 4 次中 2 次，base 從未出現）：多跑幾輪看
