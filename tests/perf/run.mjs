@@ -73,7 +73,19 @@ if (launchMode === 'cdp') {
   const { targetId } = await bcdp.send('Target.createTarget', { url: 'about:blank', newWindow: true, background: true });
   const { windowId } = await bcdp.send('Browser.getWindowForTarget', { targetId });
   await bcdp.send('Browser.setWindowBounds', { windowId, bounds: { left: winX, top: winY, width: 1440, height: 1000, windowState: 'normal' } });
-  for (let i = 0; i < 40 && !page; i++) { page = ctx.pages().find((p) => p.url() === 'about:blank'); if (!page) await sleep(250); }
+  // Match the test page by its target id, not its URL: a page the extension opens at
+  // launch (the options page on first install) can still be on about:blank here.
+  const isTestTarget = async (p) => {
+    const s = await ctx.newCDPSession(p).catch(() => null);
+    if (!s) return false;
+    const info = await s.send('Target.getTargetInfo').catch(() => null);
+    await s.detach().catch(() => {});
+    return info?.targetInfo?.targetId === targetId;
+  };
+  for (let i = 0; i < 40 && !page; i++) {
+    for (const p of ctx.pages()) if (await isTestTarget(p)) { page = p; break; }
+    if (!page) await sleep(250);
+  }
   if (!page) throw new Error('the background test window never attached');
   await page.emulateMedia({ colorScheme: theme });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -99,6 +111,20 @@ if (launchMode === 'cdp') {
   closeBrowser = () => ctx.close();
   page = ctx.pages()[0] || (await ctx.newPage());
 }
+// Only the test page is measured. Anything else the extension or the browser opens
+// (the options page on first install, which every fresh test profile is) has nothing
+// to do with what the page shows, but its renderer would count towards RAM/CPU on one
+// side only. Close it, now and whenever one appears, and record what was closed.
+const strayPages = [];
+const closeStray = (p) => {
+  if (p === page) return;
+  strayPages.push(p.url());
+  return p.close().catch(() => {});
+};
+ctx.on('page', closeStray);
+// Wait for these to be gone: context-wide calls below (addInitScript) fail on a page
+// that is closing under them.
+await Promise.all(ctx.pages().map(closeStray));
 await ctx.addInitScript(() => {
   window.__lt = { n: 0, ms: 0, errs: [] };
   try {
@@ -442,6 +468,7 @@ result.errs = (await lt()).errs;
 await hooks.afterRun({ ctx, site }).catch((e) => console.warn(`afterRun hook: ${e.message}`));
 result.popupsDismissed = popupsDismissed;
 result.focusSteals = focusGuard.steals; // times the test browser took focus and the guard gave it back
+result.strayPages = strayPages; // pages other than the test page, closed before they could be measured
 focusGuard.stop();
 check('no-page-errors', result.errs.length === 0, result.errs.slice(0, 3).join(' | '));
 result.finishedAt = new Date().toISOString();
