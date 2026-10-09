@@ -49,6 +49,7 @@
         <label class="toggle"><span data-i18n="optRefraction"></span><input type="checkbox" data-key="refraction" /></label>
         <label class="toggle"><span data-i18n="optReduceTransparency"></span><input type="checkbox" data-key="reduceTransparency" /></label>
         <label class="toggle"><span data-i18n="optPerformance"></span><input type="checkbox" data-key="performance" /></label>
+        <label class="toggle" data-i18n-title="optStaticHint"><span data-i18n="optStatic"></span><input type="checkbox" data-key="static" /></label>
       </section>
 
       <section>
@@ -67,8 +68,14 @@
         </label>
       </section>
 
-      <footer><button id="reset" type="button" data-i18n="optReset"></button></footer>
+      <footer>
+        <button id="open-options" type="button" class="link" data-i18n="openOptions"></button>
+        <span id="status" class="status" role="status" aria-live="polite"></span>
+        <button id="reset" type="button" data-i18n="optReset"></button>
+      </footer>
     </main>
+    <script src="../shared/defaults.js"></script>
+    <script src="../shared/prefs.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

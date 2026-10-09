@@ -56,7 +56,12 @@ def main():
         fail('failed to disable DEV in the release service worker')
 
     # ---- validation ----
-    referenced = {manifest['background']['service_worker'], manifest['action']['default_popup']}
+    # The support button must point at the real checkout before anything ships.
+    options_js = (stage / 'src/options/options.js').read_text()
+    if 'example.com' in options_js:
+        fail('src/options/options.js: DONATE_URL is still the test link (example.com)')
+
+    referenced = {manifest['background']['service_worker'], manifest['action']['default_popup'], manifest['options_ui']['page']}
     referenced |= set(manifest['icons'].values()) | set(manifest['action']['default_icon'].values())
     for cs in manifest['content_scripts']:
         referenced |= set(cs.get('js', [])) | set(cs.get('css', []))
@@ -73,6 +78,14 @@ def main():
         desc = locales[name]['extDescription']['message']
         if len(desc) > 132:
             fail(f'locale {name} description is {len(desc)} chars (max 132)')
+
+    # The options page's descriptions: one file per locale, same keys as English.
+    descs = {p.stem: json.loads(p.read_text()) for p in (stage / 'src/options/descriptions').glob('*.json')}
+    if set(descs) != set(locales):
+        fail(f'options descriptions {sorted(descs)} do not match locales {sorted(locales)}')
+    for name, d in descs.items():
+        if set(d) != set(descs['en']):
+            fail(f'options descriptions {name} keys differ: {sorted(set(d) ^ set(descs["en"]))}')
 
     # ---- zip ----
     out = DIST / f'glasslight-{version}.zip'

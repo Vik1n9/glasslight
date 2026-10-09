@@ -73,7 +73,19 @@ if (launchMode === 'cdp') {
   const { targetId } = await bcdp.send('Target.createTarget', { url: 'about:blank', newWindow: true, background: true });
   const { windowId } = await bcdp.send('Browser.getWindowForTarget', { targetId });
   await bcdp.send('Browser.setWindowBounds', { windowId, bounds: { left: winX, top: winY, width: 1440, height: 1000, windowState: 'normal' } });
-  for (let i = 0; i < 40 && !page; i++) { page = ctx.pages().find((p) => p.url() === 'about:blank'); if (!page) await sleep(250); }
+  // Match the test page by its target id, not its URL: a page the extension opens at
+  // launch (the options page on first install) can still be on about:blank here.
+  const isTestTarget = async (p) => {
+    const s = await ctx.newCDPSession(p).catch(() => null);
+    if (!s) return false;
+    const info = await s.send('Target.getTargetInfo').catch(() => null);
+    await s.detach().catch(() => {});
+    return info?.targetInfo?.targetId === targetId;
+  };
+  for (let i = 0; i < 40 && !page; i++) {
+    for (const p of ctx.pages()) if (await isTestTarget(p)) { page = p; break; }
+    if (!page) await sleep(250);
+  }
   if (!page) throw new Error('the background test window never attached');
   await page.emulateMedia({ colorScheme: theme });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -99,6 +111,20 @@ if (launchMode === 'cdp') {
   closeBrowser = () => ctx.close();
   page = ctx.pages()[0] || (await ctx.newPage());
 }
+// Only the test page is measured. Anything else the extension or the browser opens
+// (the options page on first install, which every fresh test profile is) has nothing
+// to do with what the page shows, but its renderer would count towards RAM/CPU on one
+// side only. Close it, now and whenever one appears, and record what was closed.
+const strayPages = [];
+const closeStray = (p) => {
+  if (p === page) return;
+  strayPages.push(p.url());
+  return p.close().catch(() => {});
+};
+ctx.on('page', closeStray);
+// Wait for these to be gone: context-wide calls below (addInitScript) fail on a page
+// that is closing under them.
+await Promise.all(ctx.pages().map(closeStray));
 await ctx.addInitScript(() => {
   window.__lt = { n: 0, ms: 0, errs: [] };
   try {
@@ -133,8 +159,8 @@ const visible = () => page.evaluate(() => document.visibilityState === 'visible'
 // Two shots of a frozen frame never match byte for byte (decoder dithering, GPU
 // rounding). They are "the same" when the mean difference is invisible and next
 // to no pixel moved by more than 8 levels.
-const nearlyIdentical = async (a, b) => {
-  const d = await page.evaluate(async ([x, y]) => {
+const shotDiff = (a, b) =>
+  page.evaluate(async ([x, y]) => {
     const decode = async (b64) => { const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const bmp = await createImageBitmap(new Blob([u], { type: 'image/png' })); const c = new OffscreenCanvas(bmp.width, bmp.height); const g = c.getContext('2d'); g.drawImage(bmp, 0, 0); return g.getImageData(0, 0, bmp.width, bmp.height).data; };
     const A = await decode(x), B = await decode(y);
     if (A.length !== B.length) return { mean: 255, pct: 100 };
@@ -142,6 +168,8 @@ const nearlyIdentical = async (a, b) => {
     for (let i = 0; i < A.length; i += 4) { const e = (Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])) / 3; sum += e; if (e > 8) over++; }
     return { mean: sum / (A.length / 4), pct: (100 * over) / (A.length / 4) };
   }, [a.toString('base64'), b.toString('base64')]);
+const nearlyIdentical = async (a, b) => {
+  const d = await shotDiff(a, b);
   return d.mean <= THRESHOLDS.stillMean && d.pct <= THRESHOLDS.stillPct;
 };
 
@@ -265,13 +293,19 @@ const isolated = [];
 cdp.on('Runtime.executionContextCreated', ({ context }) => { if (context.auxData?.type === 'isolated' && context.origin.startsWith('chrome-extension://')) isolated.push(context.id); });
 cdp.on('Runtime.executionContextsCleared', () => { isolated.length = 0; });
 await cdp.send('Runtime.enable');
-async function setStorage(values) {
+// Evaluate in the extension's content-script world of the top frame (where LG
+// lives); undefined when it can't be reached.
+async function inExtension(expression) {
   for (const id of [...isolated].reverse()) {
     const top = await cdp.send('Runtime.evaluate', { contextId: id, expression: 'window === window.top', returnByValue: true }).catch(() => null);
     if (!top?.result?.value) continue;
-    const r = await cdp.send('Runtime.evaluate', { contextId: id, expression: `chrome.storage.sync.set(${JSON.stringify(values)}).then(() => true)`, awaitPromise: true, returnByValue: true });
-    if (r.result?.value === true) return;
+    const r = await cdp.send('Runtime.evaluate', { contextId: id, expression, awaitPromise: true, returnByValue: true }).catch(() => null);
+    if (r && !r.exceptionDetails && r.result?.value !== undefined) return r.result.value;
   }
+  return undefined;
+}
+async function setStorage(values) {
+  if ((await inExtension(`chrome.storage.sync.set(${JSON.stringify(values)}).then(() => true)`)) === true) return;
   throw new Error('could not reach the extension content script to set storage');
 }
 async function applyPreset(name) {
@@ -379,9 +413,50 @@ for (const name of presetNames) {
       fs.writeFileSync(path.join(out, file), pair[1]);
       const vr = await page.evaluate((s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return r ? `${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}` : null; }, VSEL);
       const entry = { key: `${name}/${clip.name}/${i}@${t}s`, file, stable, video: vr }; // where the video sat in this very shot: compare.mjs masks it
+      // The live values behind this frame (light layer and glass), so a frozen
+      // difference can name the one that moved: compare.mjs prints them.
+      entry.vars = await page.evaluate(() => {
+        const pick = (st) => (st ? Object.fromEntries([...st].filter((p) => p.startsWith('--lg')).map((p) => [p, st.getPropertyValue(p).trim()])) : {});
+        return { ...pick(document.getElementById('lg-ambient')?.style), ...pick(document.getElementById('lg-live-vars')?.sheet?.cssRules?.[0]?.style) };
+      });
       if (!stable) { // keep both shots: compare.mjs prints where they differ
         entry.pair = [file.replace('.png', '-a.png'), file.replace('.png', '-b.png')];
         pair.forEach((buf, k) => fs.writeFileSync(path.join(out, entry.pair[k]), buf));
+      }
+      // Is the frozen frame the extension's own current answer? A settled still
+      // can still hold a legibility state (scrim, glass tint) solved for an
+      // earlier picture: shot after shot is identical, yet a fresh sample would
+      // change it. Force ticks (LG.ambient.tick: re-read the canvas, re-solve,
+      // as a theme switch does) in rounds of four until the frame stops moving,
+      // and keep that converged frame: compare.mjs judges both builds on it, so
+      // a build whose state stops part way (main before the scrim-settle fix:
+      // a forced tick moves it only 15 %, and behind near-opaque glass the gap
+      // barely shows) can't turn its timing into a difference. A converged
+      // frame that differs visibly from the still fails this run's
+      // `state-current` check.
+      let converged = pair[1];
+      let forced = false;
+      for (let k = 0; k < 10; k++) {
+        for (let j = 0; j < 4; j++) {
+          forced = (await inExtension('(LG.ambient.tick(), true)')) === true || forced;
+          await sleep(250);
+        }
+        if (!forced) break;
+        await sleep(300); // the 240 ms scrim ease
+        const next = await page.screenshot({ clip: cfg.region });
+        const done = next.equals(converged) || (await nearlyIdentical(converged, next));
+        converged = next;
+        if (done) break;
+      }
+      if (stable && forced) {
+        const d = await shotDiff(pair[1], converged);
+        entry.current = d.mean <= THRESHOLDS.visualMean && d.pct <= THRESHOLDS.visualPct;
+        entry.freshDiff = { mean: +d.mean.toFixed(2), pct: +d.pct.toFixed(2) };
+        if (!converged.equals(pair[1]) && !(await nearlyIdentical(pair[1], converged))) {
+          entry.fresh = file.replace('.png', '-fresh.png');
+          fs.writeFileSync(path.join(out, entry.fresh), converged);
+        }
+        check(`${name}/${clip.name}/${i}:state-current`, entry.current, entry.current ? 'a fresh solve leaves the frame as is' : `a fresh sample + solve changed the frame (mean Δ ${d.mean.toFixed(2)}, ${d.pct.toFixed(2)}% px > 8): the frozen legibility state was stale`);
       }
       r.stills.push(entry);
       check(`${name}/${clip.name}/${i}:still-stable`, stable, `frame at ${t}s ${stable ? 'settled' : 'kept changing'}`);
@@ -442,6 +517,7 @@ result.errs = (await lt()).errs;
 await hooks.afterRun({ ctx, site }).catch((e) => console.warn(`afterRun hook: ${e.message}`));
 result.popupsDismissed = popupsDismissed;
 result.focusSteals = focusGuard.steals; // times the test browser took focus and the guard gave it back
+result.strayPages = strayPages; // pages other than the test page, closed before they could be measured
 focusGuard.stop();
 check('no-page-errors', result.errs.length === 0, result.errs.slice(0, 3).join(' | '));
 result.finishedAt = new Date().toISOString();

@@ -33,6 +33,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
+// First install: show the options page once, so every setting and what it
+// does is in front of the user. The flag guards the cases where 'install'
+// fires again for the same profile (an unpacked extension loaded from the
+// command line reports 'install' on every launch).
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== chrome.runtime.OnInstalledReason.INSTALL) return;
+  const { welcomed } = await chrome.storage.local.get('welcomed');
+  if (welcomed) return;
+  await chrome.storage.local.set({ welcomed: true });
+  chrome.runtime.openOptionsPage();
+});
+
 async function thumbPixels(url) {
   const res = await fetch(url);
   if (!res.ok) return null;
@@ -58,6 +70,11 @@ const DEV_FILES = [
   'src/popup/popup.html',
   'src/popup/popup.js',
   'src/popup/popup.css',
+  'src/shared/prefs.js',
+  manifest.options_ui.page,
+  'src/options/options.js',
+  'src/options/options.css',
+  ...DEV_LOCALES.map((l) => `src/options/descriptions/${l}.json`),
 ];
 
 async function filesHash() {

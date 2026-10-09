@@ -194,17 +194,23 @@ for (const site of sites) {
       // video; everything the extension draws around the player is still compared.
       const keep = SITES[site]?.stillKeepBottom ?? 0;
       const maskOf = (r, k) => { const st = Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills)).find((x) => x.key === k); const m = /^(-?\d+),(-?\d+) (\d+)x(\d+)$/.exec(st?.video || r.ready?.layout?.video || ''); return m ? { x: +m[1], y: +m[2], w: +m[3], h: Math.max(0, +m[4] - keep) } : null; };
-      const stills = (r) => Object.fromEntries(Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills.filter((s) => s.stable !== false).map((s) => [s.key, s.file]))));
+      // Both builds are judged on their converged frames (run.mjs keeps one as
+      // `fresh` wherever forced ticks still moved the still): a build whose
+      // legibility state stops part way would otherwise turn its timing into a
+      // difference. A visibly stale still is reported on its own (the
+      // `state-current` check, and the warning below for the baseline).
+      const reference = (r) => Object.fromEntries(Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills.filter((s) => s.stable !== false).map((s) => [s.key, s.fresh || s.file]))));
+      for (const br of base) for (const p of Object.values(br.presets)) for (const c of Object.values(p.clips)) for (const st of c.stills) if (st.current === false && st.fresh) add('WARN', `${tag}/${st.key} r${br.round}`, `baseline frozen frame was stale (a fresh solve changed it: mean Δ ${f(st.freshDiff.mean)}); the candidate is judged against the fresh frame`);
       const pairs = [], meta = [];
       for (const cr of cand) {
         const br = base.find((r) => r.round === cr.round);
         if (!br) continue;
-        const bs = stills(br), cs = stills(cr);
+        const bs = reference(br), cs = reference(cr);
         for (const k of Object.keys(cs)) if (bs[k]) { pairs.push([bs[k], cs[k]]); meta.push({ k, round: cr.round, kind: 'cand' }); }
         for (let j = pairs.length - Object.keys(cs).filter((k) => bs[k]).length; j < pairs.length; j++) pairs[j][2] = maskOf(br, meta[j].k);
       }
       if (base.length > 1) {
-        const a = stills(base[0]), b2 = stills(base[1]);
+        const a = reference(base[0]), b2 = reference(base[1]);
         for (const k of Object.keys(a)) if (b2[k]) { pairs.push([a[k], b2[k], maskOf(base[0], k)]); meta.push({ k, kind: 'noise' }); }
       }
       // stills that never settled: show where their two shots differ
@@ -222,7 +228,13 @@ for (const site of sites) {
         const n = noise[x.k], tm = Math.max(T.visualMean, n ? 1.5 * n.mean : 0), tp = Math.max(T.visualPct, n ? 1.5 * n.pct : 0);
         const bad = res[i].mean > tm || res[i].pct > tp;
         rows[`${x.k} r${x.round}`] = { 'mean Δ': f(res[i].mean), '% >24': f(res[i].pct), 'where x,y': res[i].box, 'noise mean Δ': n ? f(n.mean) : '-', verdict: bad ? 'DIFF' : 'same' };
-        if (bad) add('FAIL', `${tag}/${x.k} r${x.round}`, `frozen frame differs: mean Δ ${f(res[i].mean)} (limit ${f(tm)}), ${f(res[i].pct)}% pixels > 24 (limit ${f(tp)})`);
+        if (bad) {
+          // Which live value moved (run.mjs records them per still).
+          const entryOf = (r, k) => r && Object.values(r.presets).flatMap((p) => Object.values(p.clips).flatMap((c) => c.stills)).find((st) => st.key === k);
+          const bv = entryOf(base.find((r) => r.round === x.round), x.k)?.vars || {}, cv = entryOf(cand.find((r) => r.round === x.round), x.k)?.vars || {};
+          const moved = [...new Set([...Object.keys(bv), ...Object.keys(cv)])].filter((v) => bv[v] !== cv[v]).map((v) => `${v} ${bv[v] ?? '-'} → ${cv[v] ?? '-'}`);
+          add('FAIL', `${tag}/${x.k} r${x.round}`, `frozen frame differs: mean Δ ${f(res[i].mean)} (limit ${f(tm)}), ${f(res[i].pct)}% pixels > 24 (limit ${f(tp)})${moved.length ? `; live values that differ: ${moved.join(', ')}` : Object.keys(bv).length ? '; live values identical' : ''}`);
+        }
       });
       if (Object.keys(rows).length) { console.log('\nfrozen frames, base vs cand:'); console.table(rows); }
     }

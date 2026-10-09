@@ -23,6 +23,10 @@
       "128": "icons/icon-128.png"
     }
   },
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -37,6 +41,7 @@
         "src/styles/glass.css"
       ],
       "js": [
+        "src/shared/defaults.js",
         "src/content/settings.js",
         "src/content/contrast.js",
         "src/content/refract.js",
@@ -56,6 +61,7 @@
         "src/styles/ani-gamer.css"
       ],
       "js": [
+        "src/shared/defaults.js",
         "src/content/settings.js",
         "src/content/contrast.js",
         "src/content/refract.js",
@@ -76,6 +82,7 @@
         "src/styles/live-chat.css"
       ],
       "js": [
+        "src/shared/defaults.js",
         "src/content/settings.js",
         "src/content/frame.js"
       ],

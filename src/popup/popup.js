@@ -1,87 +1,34 @@
-const DEFAULTS = {
-  enabled: true,
-  intensity: 70,
-  blur: 24,
-  transparency: 50,
-  refraction: true,
-  reduceTransparency: false,
-  performance: false,
-  contrastTarget: 4.5,
-  backdrop: 'hybrid',
-};
+// The popup: quick controls. Every setting, explained, lives on the options
+// page (src/options/); both share src/shared/prefs.js.
 
-const format = {
-  intensity: (v) => `${v}%`,
-  blur: (v) => `${v}px`,
-  transparency: (v) => `${v}%`,
-  contrastTarget: (v) => `${Number(v).toFixed(1)}:1`,
-};
-
-// ---- localization -----------------------------------------------------------
 // chrome.i18n always follows the browser language and cannot be overridden,
-// so a user-chosen language is read from its _locales/<lang>/messages.json.
-// "auto" keeps chrome.i18n. (The manifest name/description stay on the
-// browser language — Chrome gives extensions no way to change those.)
+// so a user-chosen language is read from its _locales/<lang>/messages.json
+// (LG.prefs.localize). The manifest name/description stay on the browser
+// language — Chrome gives extensions no way to change those.
+let t = () => '';
+const status = document.getElementById('status');
+const STATUS_KEY = { saving: 'statusSaving', saved: 'statusSaved' };
 
-async function messagesFor(language) {
-  if (language === 'auto') return (key) => chrome.i18n.getMessage(key);
-  try {
-    const res = await fetch(chrome.runtime.getURL(`_locales/${language}/messages.json`));
-    const messages = await res.json();
-    return (key) => messages[key]?.message ?? chrome.i18n.getMessage(key);
-  } catch {
-    return (key) => chrome.i18n.getMessage(key);
-  }
-}
-
-async function localize(language) {
-  const t = await messagesFor(language);
-  document.documentElement.lang = language === 'auto' ? chrome.i18n.getUILanguage() : language.replace('_', '-');
-  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
-  for (const el of document.querySelectorAll('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
-}
-
-const languageSelect = document.getElementById('language');
-
-chrome.storage.sync.get({ language: 'auto' }).then(({ language }) => {
-  languageSelect.value = language;
-  localize(language);
+const saver = LG.prefs.createSaver((state, err) => {
+  if (state === 'error') status.textContent = t(/QUOTA|MAX_WRITE/i.test(err?.message) ? 'statusQuota' : 'statusError');
+  else status.textContent = STATUS_KEY[state] ? t(STATUS_KEY[state]) : '';
 });
+const controls = LG.prefs.bindControls(saver);
 
-languageSelect.addEventListener('change', () => {
-  chrome.storage.sync.set({ language: languageSelect.value });
-  localize(languageSelect.value);
+LG.prefs.bindLanguage(document.getElementById('language'), async (language) => {
+  t = await LG.prefs.localize(language);
 });
-
-const inputs = [...document.querySelectorAll('[data-key]')];
-
-function render(settings) {
-  for (const input of inputs) {
-    const key = input.dataset.key;
-    if (input.type === 'checkbox') input.checked = !!settings[key];
-    else if (input.type === 'radio') input.checked = input.value === settings[key];
-    else input.value = settings[key];
-    const out = document.querySelector(`output[data-for="${key}"]`);
-    if (out) out.textContent = format[key](settings[key]);
-  }
-  document.body.classList.toggle('off', !settings.enabled);
-}
-
-// Older versions stored contrast targets up to 7; the slider now ends at 4.5.
-chrome.storage.sync.get(DEFAULTS).then((s) => render({ ...s, contrastTarget: Math.min(4.5, Math.max(1.5, Number(s.contrastTarget) || 4.5)) }));
-
-for (const input of inputs) {
-  input.addEventListener('input', () => {
-    const key = input.dataset.key;
-    const value = input.type === 'checkbox' ? input.checked : input.type === 'radio' ? input.value : Number(input.value);
-    const out = document.querySelector(`output[data-for="${key}"]`);
-    if (out) out.textContent = format[key](value);
-    if (key === 'enabled') document.body.classList.toggle('off', !value);
-    chrome.storage.sync.set({ [key]: value });
-  });
-}
 
 document.getElementById('reset').addEventListener('click', async () => {
-  await chrome.storage.sync.set(DEFAULTS);
-  render(DEFAULTS);
+  saver.discard();
+  await chrome.storage.sync.set(LG.DEFAULTS);
+  controls.render(LG.DEFAULTS);
+});
+
+// openOptionsPage honours the manifest's options_ui (opens it in a tab, or
+// focuses the one already open); the popup would otherwise linger behind it.
+document.getElementById('open-options').addEventListener('click', async () => {
+  await saver.flush();
+  await chrome.runtime.openOptionsPage();
+  window.close();
 });

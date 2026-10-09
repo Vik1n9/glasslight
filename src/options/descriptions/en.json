@@ -1,0 +1,19 @@
+{
+  "enabled": "Turns the whole extension on or off. Off, the sites look as they normally do and no video frames are read.",
+  "language": "Language of the popup and this page. \"Follow browser\" uses the browser's interface language. The extension's name and store description always follow the browser language — a Chrome limitation.",
+  "intensity": "Strength of the ambient light behind the page. 0 leaves only the glass; higher means richer colour. Power use is the same at any level: the video is read the same way.",
+  "blur": "How frosted the glass is (8–48 px). Higher blurs what is behind it more, and a larger blur radius costs the graphics card more. Past 50 % Transparency the frost thins, down to a quarter at 100 %; content scrolling under the glass keeps the full frost, so text never sits on text.",
+  "transparency": "How see-through the glass material is. 0 % is thicker, more opaque glass; 50 % is the default look, over the video's colours; past 50 % the glass turns clear and the backdrop gradually becomes the footage itself, on a canvas that grows from 96×54 to 768×432, with more work for the graphics card. Fixed at 50 % while Reduce transparency is on.",
+  "refraction": "Lensing at the edges of the glass on the top bar and similar surfaces, drawn with an SVG filter; Chromium browsers only. Turned off automatically by Performance mode and Reduce transparency; turning it off saves some graphics work.",
+  "reduceTransparency": "Glass becomes almost opaque (96 %) with no blur, the ambient light drops to about a quarter, Transparency is fixed at 50 % and refraction is off. Applied automatically when the system's Reduce transparency setting is on.",
+  "backdrop": "How the backdrop continues behind the video. Hybrid (default): the picture enlarged behind the player, a reflection of it straight under the player, and light streaming outward from its edges beyond. Enlarged: the picture across the whole page. Radial: the picture's edges streamed outward. Hybrid and Radial need WebGL and fall back to Enlarged without it.",
+  "performance": "For older computers: the ambient light follows the video at 15 instead of 30 frames a second, the backdrop's slow drift stops, its blur is capped at 10 px and refraction is off. The light still follows the video.",
+  "static": "The backdrop stops following the video: one frame is taken when a video loads, pauses or seeks, and nothing is redrawn after that — the lowest-power option. The glass and Transparency look the same. With nothing tracking the footage's brightness, the dimming layer under the player controls stays on. Independent of Performance mode.",
+  "contrastTarget": "The minimum contrast between text and the light behind it. 4.5:1 is the WCAG AA standard for body text (default). Lower lets the light be brighter and more vivid, but text may be harder to read.",
+  "reset": "Returns every setting to its default; the language choice is kept. Press once, then again to confirm.",
+  "donateIntro": "Glasslight is a free extension made by one developer. If it helps you, you can make a voluntary NT$100 (New Taiwan dollars) contribution to its development.",
+  "donateVoluntary": "Entirely voluntary and unrelated to any feature: nothing is limited if you don't contribute, and nothing is unlocked if you do.",
+  "donateSeller": "The payment goes to the developer personally, not to Google. It is completed on a third-party payment page (TapPay); the extension never sees, reads or stores any payment details.",
+  "donateUse": "Contributions fund the maintenance and development of this extension.",
+  "donateRefund": "A contribution buys no goods or services, so it is not refundable."
+}

@@ -1,11 +1,17 @@
 # TODO — Glasslight 開發計劃
 
-分支：`test/perf-harness`。ani.gamer.com.tw 支援（分支 `feat/ani-gamer`）已於
+分支：`feat/reflection`（三項完成後才合併、發新版）。ani.gamer.com.tw 支援（分支 `feat/ani-gamer`）已於
 1.1.0 合併發佈，其紀錄保留在本檔前半部供日後回查；**進行中的計畫是下方三節**：
 
-1. 影片下方的延伸：拉伸 → 倒影
-2. 靜態模式（Static backdrop）
-3. 設定頁（options page）＋抖內按鈕
+1. 影片下方的延伸：拉伸 → 倒影（已實作；2026-10-08 實機驗收 8/9，剩淺色主題）
+2. 靜態模式（Static backdrop）（已實作；2026-10-08 實機驗收 6/14，其餘需特定情境或基準）
+3. 設定頁（options page）＋抖內按鈕（已實作；抖內為測試連結，待接 TapPay）
+4. PR #7 效能測試未通過項目的驗證（見下方「PR #7 效能測試：待驗證」）
+
+2026-10-08 本機效能測試（`tests/perf/suite.mjs --debug` 對 `main`）：YouTube 四格通過，
+動畫瘋 `ani/light` 的 `max-glass/ani-battle` 未過，`ani/dark` 與第 2 輪未跑到。
+完整報告與原始結果在 [`docs/perf/2026-10-08-pr7/`](docs/perf/2026-10-08-pr7/REPORT.md)；
+待查事項見下方「PR #7 效能測試：待驗證」。
 
 ---
 
@@ -48,167 +54,289 @@
 
 ## 影片下方的延伸：拉伸 → 倒影
 
-狀態：2026-10-04 規劃中（尚未實作）
+狀態：2026-10-04 已實作（分支 `feat/reflection`），shader 層驗證通過，**待真實網站驗收**。
 
-### 現況
+### 原問題
 
-`hybrid`（預設 backdrop）在播放器正下方有一段「拉伸」：把畫面**最底下的帶狀**
-往下拉到標題列，用來蓋掉燒錄字幕（動畫瘋、很多 YouTube 影片的字幕落在畫面
-底部 10–25 %）。實作在 `src/content/ambient.js` 的 shader：
+`hybrid` 在播放器正下方把畫面最底下的帶狀（`SUB = 0.025` 往內縮）往下拉到
+標題列，用來蓋掉燒錄字幕。Transparency 拉高時是一條被垂直壓扁的畫面帶，
+形狀感明顯，亮度與播放器相同，跟標題／說明文字搶對比。
 
-- 常數 `SUB = 0.025`（`ambient.js:202`）：取樣時往內縮，略過字幕行。
-- `under` / `band`（`ambient.js:232-234`）：以 `smoothstep` 在角落漸入，把
-  `n.y` 混向 `band`。
-- 範圍＝`box.w`，由 `picBox.desc` 決定（YouTube 取說明區頂端、動畫瘋取標題
-  區底端，見 `measurePicture()` `ambient.js:379-382`、`LG.site.descriptionEdge`）。
+### 實作（`src/content/ambient.js` 的 hybrid 分支，`t <= 1.0`）
 
-### 問題
+- **鏡像寫在畫面（`d`）空間**：取樣點 `vec2(d.x, 2.0 - d.y)`（程式中寫成
+  `1.0 - depth`，`depth = d.y - 1`），直接當貼圖座標用。
+  - **更正原規劃**：原本寫「換算回 `n` 是 `2.0 / k.y - n.y`」，這是錯的。
+    shader 的貼圖座標本來就是畫面相對座標；box 內用 `n` 取樣，是因為放大層
+    的定義就是「螢幕點 `d` 顯示畫面點 `d / k`」。`(2 - d.y) / k.y` 鏡像的是
+    **放大層**而不是影片：在播放器底邊（`d.y = 1`）會取到 `1 / k.y`（例如
+    0.68）而非畫面最底列，與影片接不起來。只有 `2 - d.y` 在底邊等於影片的最底列。
+- **顏色混合，不是座標混合**。
+- **淡出目標＝畫面最底列（在放大層的 x，`vec2(n.x, 1.0)`）**：box 底邊上，
+  放大層與放射光讀到的都是這一列，所以倒影淡出到它，box 底邊就沒有接縫。
+  淡出曲線 `1 - smoothstep(0, L, depth)`，兩端斜率為 0，不留亮邊。
+- **長度** `L = min(k.y - 1, REFL_MAX · min(1, aspect))`，`REFL_MAX = 0.6`
+  畫面半高；直式畫面再乘寬高比（`aspect` 由 `enlargedBox()` 傳入），Shorts
+  的倒影更短。找不到說明區（box 拉到視窗底）時也不會鏡像半張畫面。
+- **亮度** `REFL_DIM = 0.7`：在播放器邊緣（標題所在）最暗，隨淡出回到 1，
+  不影響與放射光的接續。純 shader 計算，`contrast.js` 的 scrim map 不動
+  （它從 display canvas 取樣，自然會看到較暗的倒影）。
+- **模糊隨深度增加**：mip lod `min(6, 2.5 + 12 · depth)`。這是藏字幕的主力：
+  鏡像後的字幕在 depth ≈ 0.05–0.2 處，lod ≈ 3–5（8–32 texel / 256），
+  只剩一條柔和的亮帶、讀不出字形。
+- **水平方向**：
+  - 倒影本身與畫面同寬（`|d.x|` 0.9–1.1 淡出），兩側是畫面最底列。
+  - 整個「正下方」區域只在 box 外側 1/5（`|n.x|` 0.8–1.0，**box 相對**）
+    交還放大層，所以 box 側邊（側欄）與放射光的接續跟放大層一樣無縫。
+  - 若沿用原本固定的 `|d.x|` 0.8–1.2：觀看頁側欄緊貼播放器時 `k.x ≈ 1.05`，
+    box 側邊處倒影權重還有 ~0.6，與放射光之間留下硬邊（見下表）；交接區太靠內
+    則會讓放大層自己的字幕半透明露出（Shorts 實測出現 "SU"/"XT"）。
+- `SUB` 與字幕迴避偏移已移除。`radial`（純放射）與非 WebGL 的 `enlarged`
+  退路不變。效能：box 下方多兩次取樣，仍是同一張 `SRC = 256` 貼圖與既有
+  mip level，不新增 mip、不新增 pass。
 
-Transparency 拉高時這段拉伸很醜：一條被垂直壓扁的畫面帶，字幕雖然看不見了，
-但「畫面被壓扁」的形狀感很明顯，而且亮度跟播放器一樣，會跟下方的標題／說明
-文字搶對比。
+### 驗證（headless Chromium + SwiftShader，合成測試畫面）
 
-### 預計修改
+測試畫面：漸層 + 紅色方塊 + 畫面 90% 高度處的白色粗體字幕（最壞情況）。
+畫布 768×432（Transparency 100%，CSS 模糊僅 1 px），四種版面：一般觀看頁
+（右側欄、說明區在播放器下方 130 px）、劇院、Shorts、找不到說明區。
+指標是相鄰像素的最大差（0–255）。「初版」是 `8892655`（`|d.x|` 0.8–1.2
+固定交接區），「現版」是本次修正：
 
-1. 把正下方的拉伸換成**對影片本身做倒影**（鏡像 + 淡出），不是壓扁。
-   - 對稱軸＝畫面底邊（`d.y = 1`）。鏡像要寫在 `d`（picture-relative）空間：
-     `vec2(d.x, 2.0 - d.y)`；換算回 shader 現用的 `n`（box-relative）是
-     `2.0 / k.y - n.y`。**不能直接寫 `2.0 - n.y`**——那只在 `k.y = 1`
-     （box 底＝畫面底）時成立，而 box 底實際是標題列，`k.y` 通常 > 1。
-   - 範圍與原本相同：一樣到標題列（`box.w` / `picBox.desc`），不變。
-   - 倒影逐漸變淡（暗角／gamma 或乘上一個 alpha 梯度），避免在標題列那條
-     邊界出現硬切。
-2. 與放射光的接續：box 之外**本來就走放射光**（`t > 1.0` 分支，`BAND` /
-   `spread` / mip tap 那段），不需要「接回」。真正要做的是讓倒影在接近
-   box 底（標題列）時**淡出到與放射光無縫**——放射光本來就從 box 邊緣
-   開始取樣（`q` 的註解：starts at the very edge: no seam），讀到的是倒影
-   淡出後的最後顏色，銜接是自然的；重點是淡出曲線別在 box 底留下亮邊。
-3. 順便移除 `SUB` 與相關的字幕迴避邏輯——倒影是完整鏡像，字幕會一起被鏡像，
-   但因為倒影已經是上下顛倒且會淡出，不再需要為了藏字幕而偏移取樣。
-   需實測確認字幕鏡像後不會反而更明顯。
+| 版面 | box 底接縫 | 欄內逐列最大跳變 | box 側邊（側欄）接縫：改動前 / 初版 / 現版 |
+| --- | --- | --- | --- |
+| 觀看頁 | 1 | 3 | 12 / **24** / 2 |
+| 劇院 | 2 | 2 | 1 / 1 / 1 |
+| Shorts | 0 | 2 | 2 / 2 / 2 |
+| 無說明區 | 1 | 3 | 17 / **34** / 2 |
 
-### 待決策
+- 倒影第一列＝畫面最底列 × 0.7（如設計）；box 底邊與放射光差 ≤ 2。
+- 鏡像字幕在 lod 加速後只剩柔和亮帶；這是合成的最壞情況，實際影片需實機看。
+- 限制：SwiftShader 與實機 GPU 的 mip 取樣細節可能不同；未經過
+  `#lg-ambient` 的 CSS 模糊、scrim 與玻璃層，**實機外觀仍需人工確認**。
 
-- 倒影只套用在 `hybrid`，還是 `radial`（純放射）也要？預設只做 `hybrid`，
-  `radial` 保持原樣。
-- 倒影亮度上限：建議比播放器本身暗一截（疊在標題列上），靠 `#lg-scrim`
-  之外的計算處理，不要去動 `contrast.js` 的 scrim map。
-- 效能：`SRC = 256` 不變，倒影只是多一支取樣，不需新增 mip level。非 WebGL
-  退回 enlarged 的路徑不動。
+### 驗收（真實網站）
 
-### 驗收
+2026-10-08 本機實機驗證（Chromium + 本分支未封裝、已登入；腳本與截圖在 `.scratch/verify/`，
+不進版控）：
 
-- [ ] Transparency 0 / 50 / 100：倒影都不可見形狀變形，且不搶標題文字對比
-- [ ] 倒影下緣在標題列處是漸淡，不是硬邊
-- [ ] 倒影與放射光的交界無接縫、無色偏
-- [ ] 燒錄字幕鏡像後不明顯
-- [ ] 側欄旁（playlist / 動畫瘋彈幕欄）倒影在邊緣淡出，沒蓋到側欄
-- [ ] Shorts（直式）不產生過長倒影
-- [ ] theater 模式與全螢幕行為不變
-- [ ] `radial` / `enlarged` 兩種 backdrop 無退步
+- [x] Transparency 0 / 50 / 100：倒影都不可見形狀變形，且不搶標題文字對比
+      （YouTube 深色，三張截圖：只有模糊色光，標題與按鈕清楚）
+- [x] 倒影下緣在標題列處是漸淡，不是硬邊（YouTube 深色整頁截圖，無可見邊界）
+- [x] 倒影與放射光的交界無接縫、無色偏（同上，含右側推薦欄旁）
+- [x] 燒錄字幕鏡像後不明顯（動畫瘋，畫面底部有燒錄字幕「怎麼會這樣」，播放器下方
+      看不出鏡像字；淺色頁面上倒影本身也很淡）
+- [x] 側欄旁（playlist / 動畫瘋彈幕欄）倒影在邊緣淡出，沒蓋到側欄
+      （動畫瘋彈幕欄、YouTube 推薦欄已看；YouTube 播放清單頁未另測）
+- [x] Shorts（直式）不產生過長倒影（實測 Shorts 影片佔滿可視高度，下方沒有倒影空間；
+      倒影長度上限 `REFL_MAX × aspect` 這次沒有情境可驗）
+- [x] theater 模式與全螢幕行為不變（theater 正常；全螢幕 `#lg-ambient` 為
+      `display:none`，退出後恢復 `block`）
+- [x] `radial` / `enlarged` 兩種 backdrop 無退步（三種模式截圖外觀正常；
+      與 `main` 的逐像素比較只有效能測試的 hybrid）
+- [ ] 淺色主題：0.7 的暗化在淺色頁面上是否像陰影；若不自然再調 `REFL_DIM`
+      （已登入帳號的外觀設定會蓋過 `prefers-color-scheme`，改用未登入 profile 測；
+      截圖當下影片在緩衝、畫面全黑，**沒驗成**，需再看一次）
+- [ ] `tests/perf/suite.mjs` 對 `main` 比較，無效能退步
+      （2026-10-08：YouTube 4 格通過；`ani/light` 未過；後續與待驗證項目統一放在下方
+      「PR #7 效能測試：待驗證」）
+
+已完成的測試工具修正（2026-10-08）：
+
+- [x] 測試腳本隔離與畫面無關的分頁：設定頁首次安裝會自動開啟，而每次測試都是新 profile，
+      cand 因此多一個 renderer，RAM 被算成 cand 的成本（動畫瘋 6 組設定 ×1.2）。
+      `run.mjs` 改以 targetId 認出測試分頁、關掉其他分頁並記錄在 `result.strayPages`。
+      隔離後 ×1.2 的 RAM 警告消失。
+- [x] 無人在場時螢幕睡眠會讓 Chromium 停止繪製、動畫瘋格子卡在 `waitPlayable`；
+      以 `caffeinate -d -i -u node tests/perf/suite.mjs …` 執行即可。
 
 ## 靜態模式（Static backdrop）
 
-狀態：2026-10-04 規劃中（尚未實作）
+狀態：2026-10-07 已實作（分支 `feat/reflection`），headless 功能測試通過，**待真實網站驗收**。
 
 ### 目標
 
-目前的環境光每幀重繪，系統開銷大（筆電耗電、低階裝置可能跑不動）。新增一個
-**靜態模式**：只在切換頁面／載入時取一次畫面作為背景，之後完全不重繪。玻璃質感
-與透明度效果保留，只是不再跟著影片動。
+環境光每幀重繪，開銷大（筆電耗電、低階裝置可能跑不動）。靜態模式：只在影片載入、
+暫停、跳轉時取一個畫面當背景，之後不重繪。玻璃質感與透明度效果保留，只是不跟著影片動。
 
-### 現況：開銷在哪裡
+### 實作（`src/content/ambient.js`）
 
-- `ambient.js:629-649` `onFrame()` / `schedule()`：`requestVideoFrameCallback`
-  迴圈，每幀 `drawVideo()`。幀率由 `fps()`（`ambient.js:76`）決定，30 fps，
-  `performance` 開啟時 15 fps。
-- `glass.css:151-154` `@keyframes lg-drift`：全視窗漂移動畫，跑的時候每幀重繪
-  全視窗模糊層與其上每個玻璃表面。**但注意現況範圍**：預設 hybrid backdrop
-  播放中已有 `lg-radial` 把它關掉（`glass.css:147-149` `animation: none`）、
-  沒播放時 `lg-still` 也會 pause（`glass.css:141-143`）；漂移實際只在
-  「enlarged backdrop＋播放中」跑。靜態模式**強制 `lg-still` 即可涵蓋全部
-  情況，不需新增 class 或 CSS**。
-- `tick()` 每 `STATS_MS = 250` ms（`ambient.js:27`）跑一次，做 GPU readback
-  ＋ scrim solve。已有 `sampleDirty` / `settled` 提前返回（`ambient.js:981-984`），
-  收斂後只剩 `placeGlow()`，應接近零成本——但要實測確認。
-- `analyseRawFrame()`（letterbox 裁切／DRM 偵測）：`tick()` 的提前返回讓它
-  收斂後自然不再週期執行，不需特別處理；但靜態模式的一發截圖用的是當下的
-  `crop`，新載入頁面時還是預設 `{0,0,1,1}`，**擷取當下必須先跑一次**，
-  否則黑邊會被烘進色盤。DRM 全黑偵測迴圈可跳過。
-- 已存在的現成零件：`drawStill()`（`ambient.js:810-822`，「單張圖 → 模糊 →
-  拉滿視窗」）與 `showPixels()`（`ambient.js:792-808`，淡入到 `drawStill`）
-  ——**但這兩者是縮圖退路，不是靜態模式的主路徑**（理由見預計修改 3）。
-  `onBlocked` → `LG.thumbs.showVideo(videoId())`（`main.js:65`）已經是
-  drawImage 失敗時的退路，靜態模式直接沿用。
+- 設定 `static: false`（`settings.js`、`popup.js` 的 `DEFAULTS`；popup 加一個
+  toggle，滑過顯示說明，6 語系 `optStatic` / `optStaticHint`）。
+- **沒有影格迴圈**：`schedule()` 在靜態模式直接 return，涵蓋所有呼叫點；開啟時
+  `cancel()` 掉進行中的 `requestVideoFrameCallback`。
+- **漂移**：`syncMotion()` 在靜態模式強制 `lg-still`，未新增 class 或 CSS。
+- **擷取時機**：`loadeddata`（含 SPA 導頁換片）、`pause`、`seeked`、綁定新的
+  `<video>`、開啟靜態模式當下。事件只標記 `shotWanted`，實際擷取在下一次
+  `tick()`（≤ 250 ms）。沒有週期性重取。
+- **擷取流程 `takeShot()`**：
+  1. 先跑 `analyseRawFrame()`（letterbox 裁切、DRM 計數）→ 黑邊不會烘進背景。
+  2. **規劃沒寫到的問題：影片開頭常是全黑**。播放中若整格是黑的就等下一次再試
+     （每 2 個 tick 一次，維持既有 DRM 偵測的 8 秒門檻 → 之後沿用
+     `onBlocked` → 縮圖退路）。暫停在黑畫面就照實顯示，但 `playing` 時再重取
+     一次：影片載入完、autoplay 還沒開始時正是「暫停在黑色第一格」。
+  3. 把畫面複製成一張**快照**（`OffscreenCanvas`，寬 ≤ 640 px，保留比例）。
+  4. 從快照畫 backdrop（`drawVideo(1)`，hybrid／radial／enlarged、glow、scrim
+     取樣全部同一路徑）。同時取消進行中的縮圖淡入（`fadeRaf`），否則淡入的最後
+     一格會蓋掉快照——動態模式靠下一幀蓋回去，靜態模式沒有下一幀。
+- **規劃沒寫到的問題：重新對位必須從快照畫**。原規劃是捲動停止後 `drawVideo(1)`，
+  但那會畫出*當下播放到的*畫面，背景就會在每次捲動後換一張。現在 `drawVideo`
+  在靜態模式改從快照取樣；切換 backdrop、Transparency 改變畫布大小時也從快照重畫。
+- **捲動／版面變化**：`placeGlow()` 偵測到播放器移動時，靜態模式改成 debounce
+  200 ms，停下來才重畫一次（`REALIGN_MS`）；動態模式暫停時的行為不變。
+- `tick()` 的週期 `analyseRawFrame()` 在靜態模式停止（播放中每 500 ms 的 GPU
+  readback）。代價：播放器控制列的「亮畫面加暗層」（`lg-video-bright`）不再跟著
+  影片亮度變化 → 靜態模式下**固定開啟**（寧可多暗一點也要保持可讀）。
+- 關閉靜態模式：丟掉快照、重新量一次 letterbox／亮度、立即畫當下畫面、恢復迴圈。
+- `performance` 與 `static` 互相獨立（`performance` 仍是 15 fps 的即時光）。
 
-### 預計修改
+### 已決策
 
-1. `LG.DEFAULTS`（`settings.js:4-14`）新增設定 `static: false`。
-2. 靜態模式開啟時：
-   - `schedule()` 直接 return，不掛 `requestVideoFrameCallback`（涵蓋
-     visibilitychange / fullscreenchange / video 事件等所有呼叫點）。
-   - `syncMotion()` 強制 `lg-still`（既有 class，已會 pause 漂移），
-     不新增 class、不動 CSS。
-   - 擷取時機：頁面載入 + `yt-navigate-finish` / `yt-player-updated`
-     （`main.js` 的 `route()`）+ 暫停 / seek——這些正是既有 `drawOnce()`
-     的觸發點，保留即可。**不做週期性重取**，否則失去意義。
-   - **捲動／版面變化必須重新對位**：`#lg-ambient` 是 `position: fixed`
-     （`glass.css:112-120`），radial rect 是擷取當下烘進 canvas 的；捲動後
-     播放器移動、canvas 不動 → 光與播放器錯位。動態模式靠下一幀自動修正，
-     靜態模式沒有下一幀。`placeGlow()` 目前只在 `video.paused` 時重繪
-     （`ambient.js:557-563`），靜態模式要放寬這個條件，並**加 debounce**
-     （捲動停下來才重繪一次），否則捲動中每幀重繪，靜態就失去意義。
-3. 擷取路徑：**一發 `drawVideo(1)`（即既有 `drawOnce()` 路徑），不是
-   `showPixels()` / `drawStill()`**。理由：`drawStill()` 是縮圖退路，會
-   `setRadialShown(false)` 關掉 hybrid 放射 backdrop、blur 也是照 32×18
-   縮圖調的——走它會讓靜態模式的外觀與動態模式不同，直接違反「視覺與動態
-   模式一致」的驗收。`drawVideo(1)` 則保留 hybrid radial、glow、scrim
-   取樣全部不變，只是不再有 frame loop。**不需新增任何 manifest 權限**；
-   失敗（tainted / DRM）時沿用既有 `onBlocked` → 縮圖退路。
-4. 若日後想改成 `drawStill()` 那種「單張柔霧」質感，注意其 blur 是照 32×18
-   來源調的，影片幀要先降解析（如 64×36）再餵，否則太銳、像凍結的照片。
-   這是可選的視覺取捨，不是靜態模式的必要成分。
-5. `performance` 與 `static` 的關係：兩者獨立開關。`performance` 仍保留（有人
-   要的是省電但仍要活的環境光），不要把它升級成靜態。
+- 擷取來源：**A（`<video>` 元素）**。不需要任何權限；B（`captureVisibleTab`）不做。
+- 重取節奏：**不加週期性保險**，只在載入／暫停／跳轉時重取。
+- `thumbs.js`：不需要額外複用，DRM／tainted 時既有的 `onBlocked` →
+  `LG.thumbs.showVideo()` 已經是備援。
+- popup 手動刷新按鈕：沒做。暫停或跳轉就會重取；若實際使用覺得需要再加。
 
-### 待決策
+### 驗證（headless Chromium + SwiftShader，真正的 `settings.js` / `contrast.js` / `ambient.js`）
 
-- **擷取來源 A（建議）**：直接取 `<video>` 元素 once。免權限、免跨程序、
-  跟現有程式碼同一條路徑。缺點：拍不到頁面本身（只拿到影片畫面）——但現有
-  模式本來也只拿影片畫面，所以外觀一致。
-- **擷取來源 B**：`chrome.tabs.captureVisibleTab` 拍真實頁面像素。必須在
-  service worker 執行、要權限、拍不到自己這層 overlay、DRM 影片會是黑塊。
-  成本與風險都高，除非有明確需求否則不做。
-- 重取節奏：只在導頁與暫停重取，還是加一個很慢的（例如 60 s）保險？加了會讓
-  「靜態」不再是真正的靜態，建議不加，改由 popup 手動刷新。
-- `thumbs.js`（縮圖來源，非播放頁取色）尚未確認能否直接複用作為備援圖——實作前
-  要讀一次。
+測試影片：ffmpeg 產生，10 秒，前 0.4 秒全黑，上下各 45 px 黑邊，畫面持續變色。
+`requestVideoFrameCallback` 與 `drawImage` 都有計數。16 項全部通過：
 
-### 驗收
+| 項目 | 結果 |
+| --- | --- |
+| 黑色開頭後擷取到非黑畫面 | 通過（平均亮度 115） |
+| 靜態模式 `requestVideoFrameCallback` 次數 | 0 |
+| 播放 2.5 秒內的重繪次數 | 0；背景像素完全不變 |
+| `lg-still` | 有 |
+| letterbox 黑邊沒烘進背景 | 通過（畫面下緣下方那列平均亮度 84，不是黑） |
+| 捲動中重繪 | 0 次 |
+| 捲動停止後 | 從快照重畫 1 次，沒有從影片取樣 |
+| 跳轉、暫停 | 各重取 1 張新畫面 |
+| 關閉靜態模式 | 迴圈恢復、`lg-still` 解除 |
+| 播放中再開啟 | 迴圈立即停止 |
+| 載入後尚未播放（第一格是黑的）時擷取 | 先顯示黑畫面；開始播放後重取到非黑畫面，仍無迴圈 |
+| 縮圖淡入中（`showPixels`）擷取 | 快照勝出（對照：沒取消淡入時，紅色縮圖會蓋掉快照） |
 
-- [ ] 靜態模式下**沒有每幀排程**：`requestVideoFrameCallback` 完全不掛、
-      `drawVideo()` 只在一發擷取／捲動重新對位時被呼叫，播放 30 秒後
-      DevTools Performance 記錄為 idle
+主執行緒時間（播放中，每秒 ms，兩輪一致）：
+
+| 情況 | Task | Script |
+| --- | --- | --- |
+| 不載入擴充 | 1–1.6 | 0 |
+| **靜態模式** | **17–20** | **16–18** |
+| 動態模式，暫停中（既有的 idle 狀態） | 20 | 19 |
+| 動態模式，播放中 | 524–534 | 512–522 |
+
+- 靜態模式播放中 ≈ 既有的暫停狀態，比動態播放少約 96%。剩下的是每 250 ms 一次的
+  `tick()`（停掉計時器後降到 1.2 ms/s）；JS profiler 顯示其中我們的程式碼 5 秒內
+  只佔約 1 ms，沒有 readback、沒有 layout。這筆差距是既有的 idle 開銷，不是這次引入的。
+- 限制：SwiftShader 是軟體繪圖，GPU 端的開銷（模糊、合成）不在這些數字裡；
+  實機耗電要用 DevTools 或 `tests/perf/suite.mjs` 量。
+
+### 驗收（真實網站）
+
+靜態模式背景在播放中不跟著動：實機相隔 6 秒的兩張截圖，播放器外的背景逐像素 Δ = 0，
+播放器內 Δ = 76。
+
+- [ ] 靜態模式下**沒有每幀排程**（headless 已驗證），播放 30 秒後 DevTools
+      Performance 記錄為 idle
+      （2026-10-08 實機：靜態 10 秒內擴充功能的 `requestVideoFrameCallback` 0 次，
+      動態 5 秒 120 次；整頁 TaskDuration 靜態 57、動態 219 ms/s，含 YouTube 自己的
+      播放開銷，**缺「不載入擴充」的基準**，所以還不能說是 idle）
 - [ ] 殘留的 rAF 使用者仍正常且不影響結果：`tick()` 的 scrim 漸層
       (`scrimRaf`)、glow 定位 (`glowRaf`)、縮圖淡入 (`fadeRaf`)、
-      指標高光 (`specAngle`, `main.js`)，這些本來就只在需要時排程
-- [ ] 漂移動畫停止（enlarged backdrop＋播放中的情況；強制 `lg-still` 即可）
-- [ ] 頁面載入、切換影片（SPA 導頁）、暫停／seek 時背景都會更新
+      指標高光 (`specAngle`, `main.js`)
+- [x] 漂移動畫停止（實機 `lg-still` = true）
+- [x] 頁面載入、切換影片（SPA 導頁）、暫停／seek 時背景都會更新
+      （實機：seek 後背景跟著新畫面；點推薦影片 SPA 換片後背景換成新影片的色調）
 - [ ] 捲動停止、theater 切換、視窗 resize 後，backdrop 重新對位到播放器，
-      無錯位；捲動進行中不會每幀重繪（debounce 生效）
-- [ ] 新載入的 letterbox 影片：擷取前 `analyseRawFrame()` 已跑過一次，
-      黑邊沒有被烘進色盤
-- [ ] 玻璃質感與 Transparency 0 / 50 / 100 皆保留，視覺與動態模式一致
+      無錯位；捲動進行中不會每幀重繪（實機：捲動、resize 後對位正確；
+      靜態模式下的 theater 切換未測）
+- [ ] 新載入的 letterbox 影片：黑邊沒有被烘進色盤（headless 已驗證；實機未找片測）
+- [ ] YouTube 廣告：廣告結束切回正片時重取（應由 `loadeddata` 觸發，需實機確認；
+      測試帳號是 Premium，沒有廣告可測）
+- [x] 玻璃質感與 Transparency 0 / 50 / 100 皆保留，視覺與動態模式一致（實機截圖）
 - [ ] scrim map 仍正確求解，文字對比達到目標（淺色、深色主題）
-- [ ] 影片暫停／結束後背景仍是該幀，不退回黑底
+- [ ] 影片暫停／結束後背景仍是該幀，不退回黑底（實機：暫停 ✓；播完未測）
 - [ ] DRM / tainted 影片正確退到縮圖，不報錯
-- [ ] 關閉靜態模式後即時環境光完全恢復，無殘留狀態
-- [ ] 效能量測：靜態模式的 CPU 使用與動態模式、關閉插件三者比較
-- [ ] README、popup 說明、PRIVACY／`store/listing.md` 補上新的設定項
+- [x] 關閉靜態模式後即時環境光完全恢復，無殘留狀態
+      （實機：關閉後 4 秒 120 次 rVFC，`lg-still` 解除）
+- [ ] 效能量測：實機上靜態模式、動態模式、關閉插件三者比較（只有前兩者，見第一項）
+- [x] README、popup 說明、PRIVACY／`store/listing.md` 補上新的設定項
+      （PRIVACY 原本也漏列「backdrop mode」，一併補上）
+- [x] 動畫瘋：同一套程式路徑，需實機看一次（實機：靜態 8 秒內 rVFC 0 次，畫面正常）
 
 ## 設定頁（options page）＋抖內按鈕
 
-狀態：2026-10-04 規劃中（尚未實作）
+狀態：2026-10-07 已實作（分支 `feat/reflection`），headless 端對端測試通過。抖內按鈕目前是
+**測試假連結** `https://example.com/glasslight/donate-test`（`src/options/options.js`
+的 `DONATE_URL`），頁面上會顯示「測試連結」標籤，`scripts/build.py` 會拒絕打包。
+**待辦：申請 TapPay Link Pay，把連結換成正式結帳頁。**
+
+### 實作摘要
+
+- `manifest.json`：`options_ui`（`open_in_tab: true`）。**權限沒有任何變動**。
+- `src/shared/defaults.js`：`DEFAULTS` 唯一的定義（含 `clampSettings`），內容腳本、
+  popup、設定頁都載入它；`settings.js` 與 `popup.js` 的重複定義已移除。
+- `src/shared/prefs.js`（popup 與設定頁共用）：
+  - 語系：選定的語言與「跟隨瀏覽器」都自己解析成 6 種之一，標籤與說明來自同一語系
+    （順便修正：Chrome 對 zh-HK 沒有 zh 可退，原本會顯示英文，現在顯示繁中）。
+  - 控制項與 `storage.sync` 雙向綁定：`storage.onChanged` 只更新變動的欄位，
+    本頁還沒寫出的欄位不會被蓋掉。
+  - 寫入：最後一次變動後 400 ms 批次寫入；放開滑桿或切換開關時立即寫入，但兩次
+    寫入至少間隔 1 秒（按住方向鍵也不會超過配額）；失敗時顯示原因並 20 秒後重試；
+    popup 關閉（`pagehide`）時盡力送出。
+  - 狀態列：儲存中／已儲存／儲存失敗／太頻繁（`role="status"`）。
+- `src/options/`：設定頁。一般（啟用、語言）→ 外觀（光、模糊、透明度、折射、降低透明度）
+  → 行為（背景模式、效能模式、靜態背景）→ 進階（對比目標、Reset）→ 支持開發。
+  兩欄 grid、600 px 以下單欄、`color-scheme`、深淺色、`prefers-reduced-motion`。
+  Reset 只在進階區，**按兩次**才執行（第一次變成「再按一次以重設」，4 秒後還原）。
+- 說明文字：`src/options/descriptions/<locale>.json` × 6，內容依程式實際行為撰寫
+  （例：效能模式＝15 fps、不漂移、背景模糊上限 10 px、關閉折射；降低透明度＝玻璃
+  96% 不透明、環境光約 1/4）。說明中引用的選項名稱都對齊各語系實際標籤。
+- popup：改用共用模組，新增「所有設定與說明」（`openOptionsPage()` 後
+  `window.close()`）與儲存狀態；保留原本的 Reset。
+- `background.js`：首次安裝開一次設定頁。效能測試每次都用新 profile，所以每次都會
+  觸發；`tests/perf/run.mjs` 會關掉這類非測試分頁（`result.strayPages`），不影響量測。
+- `scripts/build.py`：驗證 `options_ui` 檔案存在、6 語系說明檔齊全且鍵相同、
+  `DONATE_URL` 不是測試連結。
+
+### 與規劃不同之處（及理由）
+
+1. **說明檔放在 `src/options/descriptions/`，不放 `_locales/<lang>/`**：
+   不確定 Chrome／商店審查對 `_locales` 裡的非 `messages.json` 檔案的處理方式，
+   放在 `src/` 下沒有這個風險。
+2. **抖內獨立成最後一節「支持開發」，不放在「進階」**：付款按鈕和 Reset 放在同一區
+   容易混淆，獨立一節也讓「與功能無關」的說明更清楚。
+3. **首次安裝除了 `reason === 'install'`，還加了 `storage.local` 旗標**：實測發現
+   用指令列載入的未封裝擴充功能每次啟動都會回報 `install`；商店安裝不會，但旗標
+   能讓「只開一次」在所有情況下成立。
+4. **抖內按鈕配色**：用深玫瑰→深橘漸層，白字在兩端皆 ≥ 5.3:1（原本想用的亮橘只有
+   約 2.3:1，未達 AA）。
+
+### 驗證（headless Chromium，載入真正的未封裝擴充功能）
+
+32 項全部通過：
+
+| 項目 | 結果 |
+| --- | --- |
+| 首次安裝自動開啟設定頁 | 1 個分頁 |
+| 重新啟動不再開啟 | 0 個（加旗標前會再開一次） |
+| 6 語系：所有標籤與說明非空、`lang` 屬性正確 | 12 項通過 |
+| 「跟隨瀏覽器」解析 | zh-TW/zh-HK→zh_TW、zh-CN/zh→zh_CN、ja、ko-KR→ko、es-419→es、fr/en-GB→en |
+| 滑桿連續 50 次 input | 寫入 1 次，存入最後的值，顯示「已儲存」 |
+| 按住方向鍵 20 次 | 寫入 1 次，存入最後的值 |
+| 設定頁 → popup、popup → 設定頁、語言跨頁同步 | 通過 |
+| Reset 只在進階區；按一次不動作、按第二次才重設（語言保留）；popup 跟著更新 | 通過 |
+| 抖內按鈕在新分頁開啟結帳網址；測試標籤可見 | 通過（沙箱無網路，以導向網址判斷） |
+| Tab 順序依頁面順序；Space 切換開關；開關有焦點框 | 通過 |
+| 1100 px 雙欄、420 px 單欄、無水平捲動 | 通過 |
+| popup 的「所有設定」不會開出重複分頁 | 通過 |
+| 頁面無 JS 錯誤 | 通過 |
+
+對比（說明文字在卡片上，含角落色暈）：深色 6.9–7.6:1、淺色 6.6–7.1:1；內文 13.7:1 以上。
+靜態模式的 16 項回歸測試在改用 `defaults.js` 後重跑，全部通過。
+`build.py` 在測試連結下如預期失敗；換成非測試網址的副本可完整打包（37 個檔案）。
 
 兩件事一起做：把設定從小 popup 搬成一完整頁面（每個功能都能直接調，
 每個功能下方附完整說明），頁面上放一個抖內按鈕。
@@ -384,26 +512,198 @@ Apple Pay / Google Pay 無法在 `chrome-extension://` 頁面內執行，這是�
 ### 驗收
 
 - [ ] 商店安裝後，右鍵圖示 → 選項 可開啟設定頁；popup 內的連結也可開啟
-- [ ] 首次安裝會自動開一次設定頁（且只開一次）
-- [ ] 設定頁可調整所有功能，控制項即時生效（與 popup 雙向同步）
-- [ ] 每個功能下方都有說明，內容與實際行為一致（`performance` 說明要與
+      （`options_ui` 與 popup 連結 headless 已驗證；右鍵選單需實機）
+- [x] 首次安裝會自動開一次設定頁（且只開一次）
+- [x] 設定頁可調整所有功能，控制項即時生效（與 popup 雙向同步）
+      （寫入 storage 有 400 ms 批次；內容腳本的即時套用需實機看一次）
+- [x] 每個功能下方都有說明，內容與實際行為一致（`performance` 說明要與
       15 fps／新增的靜態模式一致）
-- [ ] 6 種語言的說明皆完整，沒有漏翻或顯示 key 名
-- [ ] 選項「自動」時跟隨瀏覽器語言；選特定語言時設為 `lang` 屬性正確
-- [ ] `DEFAULTS` 只剩一份定義，popup 與設定頁共用
+- [x] 6 種語言的說明皆完整，沒有漏翻或顯示 key 名（翻譯品質建議找母語者看一次）
+- [x] 選項「自動」時跟隨瀏覽器語言；選特定語言時設為 `lang` 屬性正確
+- [x] `DEFAULTS` 只剩一份定義，popup 與設定頁共用
 - [ ] 抖內按鈕開啟台灣託管結帳頁（TapPay Link Pay），該頁自動提供
       Apple Pay / Google Pay；在 `chrome-extension://` 內不嘗試載入支付 SDK
-- [ ] NT$100 固定金額、單一按鈕；不抖內時功能與外觀完全無差異
-- [ ] 設定頁明寫賣家是開發者本人（非 Google）、自願贊助、與功能無關、
+      （開新分頁、不載入 SDK 已完成；**待換成正式 TapPay 連結**並實測錢包）
+- [x] NT$100 固定金額、單一按鈕；不抖內時功能與外觀完全無差異
+- [x] 設定頁明寫賣家是開發者本人（非 Google）、自願贊助、與功能無關、
       無退款（不提供商品或服務）
-- [ ] 抖內不需 webhook、不需權限驗證、不控管任何功能（純自願贊助）
-- [ ] 權限清單沒有變動（仍只需 `storage` + `https://i.ytimg.com/*`）
+- [x] 抖內不需 webhook、不需權限驗證、不控管任何功能（純自願贊助）
+- [x] 權限清單沒有變動（仍只需 `storage` + `https://i.ytimg.com/*`）
 - [ ] 境外信用卡也能付款（TapPay 國外卡路徑實測一次）
 - [ ] PRIVACY.md、`store/listing.md`、README 已更新並通過商店審查
-- [ ] 設定頁在窄視窗（< 600px 單欄）與一般分頁寬度下版面正常
-- [ ] Reset 只出現在進階區，不在主頁
-- [ ] 鍵盤可完整操作（Tab 順序、Space 切換 toggle）
-- [ ] 連續拖曳任一滑桿不會觸發 `storage.sync` 配額錯誤，且有「已儲存」提示
+      （文件已更新；商店審查待送出）
+- [x] 設定頁在窄視窗（< 600px 單欄）與一般分頁寬度下版面正常
+- [x] Reset 只出現在進階區，不在主頁（popup 仍保留原本的 Reset）
+- [x] 鍵盤可完整操作（Tab 順序、Space 切換 toggle）
+- [x] 連續拖曳任一滑桿不會觸發 `storage.sync` 配額錯誤，且有「已儲存」提示
+
+## PR #7 效能測試：待驗證
+
+狀態：2026-10-08 本機跑 `tests/perf/suite.mjs --debug`（22fe5fc 對 main），結果在
+`docs/perf/2026-10-08-pr7/`。YouTube 四格 PASS；**ani/light 在
+`max-glass/ani-battle` 第 0 張凍結畫面 FAIL**（頁首 mean Δ 31）；ani/dark 與第 2 輪沒跑到。
+
+### 目前已知（事實）
+
+- 兩邊頁首**背後的畫面相同**：cand ＝ base 均勻疊上一層白（各區 a ≈ 0.42，連兩條玻璃之間
+  也有）。差的是可讀性狀態（scrim／玻璃底色），不是畫面、不是倒影（比對範圍止於 y 710，
+  影片底邊在 709）。
+- **未達對比目標的是 base**：max-glass 目標 1.5:1，base 右半導覽列文字 **1.15:1**，
+  cand 3.55:1。
+- 為什麼 base 停在過期狀態：**未確認**。沙箱連不到動畫瘋（403），軟體解碼也重現不出
+  跳轉競態；兩版有差異的程式路徑都碰不到頁首的 scrim 格與 masthead 求解。
+
+### 推論（未驗證，已被下方「根因」取代）
+
+- 候選一：暫停＋跳轉之後，最後一次取樣與求解用的畫面和最後顯示的畫面不同。
+- 候選二：scrim 的 240 ms 漸變只靠 `requestAnimationFrame` 推進；若當時 rAF 沒有執行
+  （例如視窗被遮或螢幕休眠），畫面上的 scrim 會停在舊值，而 `tick()` 在 settled 後提早
+  返回、不再重畫。
+
+### 根因（2026-10-08 第二次結果後確認，已在本地重現）
+
+- **兩次結果裡頁首只有兩種狀態，build 互換**（量自兩份 header 截圖）：
+
+  | 狀態 | 右半導覽列對比 | 頁首亮度 | 出現在 |
+  | --- | --- | --- | --- |
+  | A 淡（收斂） | 1.14–1.15 | 約 57 | 第一次 base、第二次 cand（`state-current` 通過） |
+  | B 清楚（過期） | 3.47–3.55 | 約 134–140 | 第一次 cand、第二次 base（`state-current` WARN） |
+  | 中間 | 1.55 | 約 76 | 第二次 base 強制求解一次後（base-fresh） |
+
+  → 拿到哪一種**取決於時序，與 build 無關**；不是 PR 造成的差異。
+- **機制**：淺色主題下 scrim「需要時立即加深、不需要時每 tick 只放鬆 15%」，玻璃底色也一樣；
+  但 `tick()` 的 `settled` **只看玻璃底色是否收斂**。玻璃先到，`tick()` 就提早返回，
+  scrim 停在放鬆到一半的值（狀態 B），停在多少看時序。強制 tick 只會讓它再放鬆到玻璃
+  又收斂為止，所以 base-fresh 是中間值（1.55），不是收斂值。
+- **重現**（本地，暫停在黑畫面再跳到彩色畫面，淺色主題、對比 4.5）：main 與 PR **數字完全相同**——
+  scrim 0.769 → 放鬆一步到 0.755 就停住（7 秒後不變），真正的收斂值是 0.68–0.73。
+- 因此：ani 第 0 張的 Δ 7.73（cand 對 base-fresh）＝ cand 已收斂 vs base-fresh 只收斂一半；
+  第 2 張 cand 過期（與 base 相同數字）＝ 同一個缺陷。
+
+### 修正（本分支）
+
+- `ambient.js`：`settled` 另外要求 scrim map 也收斂（`scrimGap < 0.004`，與 `paintScrim`
+  的重畫門檻相同）；畫面靜止時（暫停、縮圖）scrim 與玻璃底色每 tick 放鬆 50%（播放中維持
+  15%，避免閃動）。本地：暫停後約 1.5 秒內收斂到差 0.003–0.01，4.5 秒完全收斂；main 始終停在錯誤值。
+- harness：
+  - 判定過期前先**連續強制 4 次 tick**（單次只放鬆 15%，小差距會漏判）；
+  - 判定過期後**持續強制 tick 直到畫面不再變化**，fresh 才是收斂值（main 沒有修正，需要這樣才可比）；
+  - 每張凍結畫面記錄即時變數（`--lg-glow-opacity`、`--lg-glow-lift`、`--lg-tint-rgb`、
+    `--lg-glass-live` 等）；比對 DIFF 時 compare 列出兩版不同的變數。
+- 本地模擬 harness 流程（main vs 修正後）：修正版 3/3 收斂且 Δ 0；修正版對 main 的凍結畫面
+  最高 Δ 1.91／3.66% > 24（FAIL），對 main 收斂後的 fresh 畫面 Δ 0.57–0.84（通過）。
+  靜態模式、設定頁、compare 判定的既有測試全部重跑通過。
+
+### 新發現（與 PR 無關，既有問題）
+
+- **收斂後的答案本身仍低於對比目標**：動畫瘋淺色、max-glass、該暗畫面下，右半導覽列
+  （序號兌換…APP）收斂後只有 **1.14:1**，目標 1.5:1；左半 3.8:1。右半項目的字色比左半淺，
+  推測 solver 假設的文字色比這些項目深（未驗證）。
+
+### 已做（`faaca5d`，只動測試工具）
+
+凍結畫面穩定後強制重新取樣求解（`LG.ambient.tick()`）再拍一張：畫面改變即
+`state-current` 失敗（cand FAIL、base WARN），存 `-fresh.png`；base 過期時 cand 改與
+base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「狀態正確時不誤報」（Δ 0–0.28）。
+
+### 待驗證
+
+- [x] 在本機重跑完整 debug suite（harness 指紋已變，base 快取會重建）：
+      （2026-10-08 完成：debug 卡在 yt4k/light 後改跑非 debug 完整矩陣 54 分鐘，兩輪全部跑完；
+      最終 FAIL 4／WARN 4，全在第 1 輪；第 2 輪全 PASS。結果：`docs/perf/2026-10-08-pr7-state-current/`）
+      `caffeinate -d -i -u node tests/perf/suite.mjs --debug --base origin/main --cand HEAD --window 0,0`
+      - 進度（2026-10-08 12:00 起，`a4b337a`，harness 含 `state-current`）：
+        - `yt/light`、`yt/dark`：PASS。
+        - `yt4k/light`：debug 停在 `solid-glow/yt4k-heavy/0@36s`，凍結畫面 mean Δ 2.25
+          （門檻 2）、0% 像素 > 24；`--resume` 重量 cand 後**數值完全相同**，所以可重現，
+          不是雜訊。差異只在頁首（masthead），很淡。兩邊 9 張凍結畫面的
+          `state-current` 全部通過。舊 harness（`f707717`）下這格是 PASS，原因可能是新的
+          強制重新求解，也可能是 PR 的微小變化，**尚未判斷**。
+        - debug 模式卡在這格就到不了動畫瘋，所以 12:30 左右改跑**非 debug 完整矩陣**
+          （同一個 `--out`，結果在本機 `/private/tmp/claude-501/lg-perf5/`），
+          讓 `ani/light/max-glass/ani-battle` 和其他格都有結果。
+      - **`ani/light` 已有結果**（非 debug 完整矩陣，`docs/perf/2026-10-08-pr7-state-current/`）：
+        base 在 `max-glass/ani-battle` 0、2 兩張 `state-current` 過期 → main 缺陷**確認**；
+        但 cand 第 0 張對 base 的 fresh 畫面仍 FAIL（Δ 7.73），且 cand 第 2 張也過期
+        （數值與 base 相同）。兩種判讀情境都不完全符合，**交回分析**（細節見該資料夾 README）。
+      - `ani/dark`（首次跑到）：**PASS**，兩邊 `state-current` 全部通過。
+      - 第 2 輪：全部 PASS。整份 `verdicts.txt` 與所有 `result-*.json` 已存進同一資料夾。
+- [x] 用修正後的程式與 harness 再跑一次完整矩陣，確認：
+      （2026-10-08 22:56 +0800 跑完，63.9 分鐘，harness `f71efff1c3`，程式＝`5bdde36`；
+      結果 `docs/perf/2026-10-08-pr7-scrim-fix/`。總判定 FAIL 4／WARN 4，細節見下兩項與該 README）
+  - [x] cand 所有凍結畫面 `state-current` 通過（含 `ani/light/max-glass/ani-battle/0`、`/2`）
+        （24 份 cand 結果全部 0 個過期）
+  - [x] `ani/light/max-glass/ani-battle/0`、`/2`：cand 對 base（收斂後的 fresh）通過；
+        base 的 `state-current` WARN 仍會出現（main 尚未修正，屬預期）
+        （第 0 張 Δ 7.73 → 0.32、第 2 張 Δ 3.23 → 0.44，皆 same；base 仍過期 Δ 8.27／6.25）
+- [ ] 修正後新出現的 4 個凍結畫面 FAIL（都附了不同的即時變數，base 的 `state-current` 都通過）：
+  - `ani/light/solid-glow/ani-battle/2` r1：Δ 3.46、4.59% > 24（頁首左半），
+    `--lg-glass-live 0.32 → 0.00`、`--lg-tint-rgb 120 32 8 → 112 32 8` ← **最明確的一個**
+  - `ani/light/max-glass/ani-battle/1` r1：Δ 2.16、0%，`--lg-glass-live 0.16 → 0.20`
+  - `yt4k/light/default/yt4k-heavy/1` r2：Δ 2.15、0%（雜訊 1.11），`--lg-glass-live 0.60 → 0.58`
+  - `ani/dark/default/ani-white/0` r2：Δ 2.32（門檻 2.08）、0%（雜訊 1.39），`--lg-tint-rgb 128 104 104 → 128 112 112`
+  - 候選（未驗證）：靜止畫面改為每 tick 放鬆 50%，玻璃底色與量化色階停在和 main 不同的位置
+  - **2026-10-09 分析**：4 張的 base 都**還沒收斂**——強制 tick 後畫面仍會變（`freshDiff` 0.18–0.49），
+    cand 則 0–0.02（全部 96 張 cand 最大 0.09；base p90 0.16、最大 8.27）。base 的變動低於
+    「過期」門檻（2），被當成最新，未收斂的畫面就成了比對基準。
+    - `solid-glow/ani-battle/2`：> 24 的像素在玻璃**外**（上緣、兩條玻璃間的縫、左緣，
+      即不透明玻璃露出背景之處）；base 那裡較亮（玻璃上方 107.9 vs 100.5，淺色主題＝scrim
+      較高＝過期方向）。導覽列對比兩邊 7.4／7.3:1。列出的 `--lg-glass-live 0.32 → 0.00`
+      在 solid 玻璃下看不到（玻璃本身不透明度更高）。
+    - `max-glass/ani-battle/1`、`yt4k/light/default/1`：不同的玻璃值方向也符合「base 尚在放鬆」。
+    - **可能例外** `ani/dark/default/ani-white/0`：`--lg-tint-rgb` 跨一個 8 階（104 → 112）。
+      色調只取決於取樣畫面、與時序無關，可能是倒影讓主色剛好跨過量化邊界（推論）。
+  - **處理**：harness 改為每張凍結畫面一律強制收斂（每輪 4 次 tick，直到不再變化），兩版都用
+    收斂畫面比對；`state-current` 仍把關明顯過期。本地模擬：main 3 次中 2 次「未收斂但低於門檻」，
+    修正版一輪即收斂；收斂對收斂 Δ 0.57–0.64（通過），凍結對凍結最高 Δ 1.91／3.66% > 24（失敗）。
+- [x] 用「一律收斂」的 harness 再跑一次完整矩陣，確認：
+      （2026-10-09 11:00 +0800 跑完，63.5 分鐘；base `d78a2e4`、cand `e13a599`（程式同 `5cc21d3`）、
+      harness `f5a190b51d` 全部一致。總判定 FAIL 1／WARN 5。結果 `docs/perf/2026-10-09-pr7-converged/`）
+  - [x] 上面 3 張（`solid-glow/ani-battle/2`、`max-glass/ani-battle/1`、`yt4k/light/default/1`）通過
+        （Δ 3.46 → 0.56、2.16 → 1.23、2.15 → 1.21，皆 same）
+  - [ ] `ani/dark/default/ani-white/0`：若仍以 `--lg-tint-rgb` 跨一階而失敗，判斷是否為倒影對主色
+        的確定性影響；若是，考慮色調量化加遲滯（hysteresis），避免在邊界附近來回跳
+        （2026-10-09：第 1 輪**仍失敗**，Δ 2.32、`128 104 104 → 128 112 112`，與上一輪數值相同；
+        第 2 輪 same Δ 1.07。兩次執行都是「兩輪中一輪失敗」且不在同一輪，兩邊都已收斂 → 不是時序，
+        較像主色落在 /8 量化邊界、偶爾被推過去，符合遲滯的方向；推論，未驗證）
+  - [ ] cand 的 `state-current` 仍全部通過；沒有新的 CPU／RAM 警告（每張凍結畫面多約 1.5 秒）
+        （`state-current`：cand 24 份全部通過 ✓。新 RAM 警告：`ani/dark/solid-glow/ani-battle`
+        2809.93 → 3299.86 MB ×1.17（軟門檻），上一輪沒有；舊的 max-glass「leak?」也沒出現）
+- [x] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：（2026-10-08 修正後重跑：**Δ 0.22，same**，
+      差異消失；最可能是同一個 scrim 放鬆到一半的問題，屬推論）兩邊 `state-current` 都通過、
+      三次量測相同 → 是 PR 造成的確定性差異，不是上面的缺陷。下一次執行的 FAIL 訊息會列出
+      哪個即時變數不同，據此判斷。候選（未驗證）：倒影改變了整張畫布的統計值，影響
+      ① `--lg-tint-rgb`（量化 8 階、spill 0.1，估計影響不到 1 個色階，可能性低），或
+      ② `--lg-glow-opacity`／`--lg-glow-lift`（淺色主題依 `lum` 而變；solid-glow 的 glow 很強，
+      延伸到頁首後方）
+- [x] 判讀 `ani/light/max-glass/ani-battle/0@1201s`（2026-10-09：根因確認為 scrim 停在半途，
+      已修正；`5bdde36` 重跑 Δ 0.32，same）：
+  - [ ] 若 **base** 的 `state-current` 為 WARN、凍結畫面比對 PASS → 證實是 main 既有缺陷
+        （凍結後可讀性狀態過期），進行下一項
+  - [ ] 若 base `state-current` 正常但仍 DIFF → 上面的推論錯誤，差異是 PR 造成的，
+        把新結果（含 `-fresh.png`）交回重查
+  - 2026-10-08 結果：base `state-current` **WARN**（Δ 5.71），但 cand 對 base fresh 畫面
+    **仍 FAIL**（Δ 7.73）→ 第三種情況：main 缺陷存在，另外還有未解釋的差異（cand 的導覽列
+    比 base fresh 更淡，且 cand 自己的 fresh solve 不改變它）。資料：
+    `docs/perf/2026-10-08-pr7-state-current/`。
+- [x] cand 所有凍結畫面的 `state-current` 都通過（cand 若失敗即為本 PR 的問題）
+      （2026-10-08 `5bdde36` 重跑：24 份 cand 結果 0 張過期）
+      （2026-10-08：`ani/light/max-glass/ani-battle/2` cand 過期，Δ 0.82／3.30%，
+      與 base 完全相同 → 疑為同一個 main 缺陷，PR 未改變；其餘已量的格子全部通過）
+- [x] 若證實是 main 的缺陷：找出根因 → 已確認並在本分支修正（見「根因」「修正」）
+- [ ] 把 scrim 收斂修正另開 PR 修 main（`ambient.js` 的 `scrimGap`／`relaxRate` 兩處）；
+      main 修好後本 PR 再對新的 main 跑一次，base 不應再出現 `state-current` WARN
+- [ ] 動畫瘋右半導覽列收斂後低於對比目標（見「新發現」）：確認 solver 用的文字色與這些
+      項目的實際字色，必要時讓 solver 以頁首實際最淺的文字色求解
+- [ ] RAM 成長警告（`max-glass/ani-battle`，cand 4 次中 2 次，base 從未出現）：多跑幾輪看
+      是否重現；若只在 cand 出現，比對 heap snapshot 找是否有每幀累積的配置
+      （2026-10-08 state-current 完整矩陣、scrim 修正後完整矩陣：都**沒有出現**任何 RAM 警告。累計 cand 6 次中 2 次）
+- [x] `yt/light/solid-glow` RAM ×1.16 警告：觀察是否重現（軟門檻）
+      （2026-10-08 state-current 完整矩陣兩輪都未重現）
+- [x] ani/dark 與第 2 輪：跑完（2026-10-08：ani/dark PASS；第 2 輪全 PASS）
+- [ ] harness 不涵蓋的部分手動檢查：縮圖光（首頁、搜尋、頻道頁）、popup 與設定頁 UI
+- [ ] （可選）`suite.mjs` 自己保持螢幕不休眠，不必依賴外部 `caffeinate`
+      （報告：螢幕休眠時 Chromium 停止繪製，動畫瘋那格卡在 `waitPlayable` 2 小時）
 
 ## 已知缺口 / 後續
 
