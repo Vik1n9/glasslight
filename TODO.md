@@ -657,6 +657,9 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
     收斂畫面比對；`state-current` 仍把關明顯過期。本地模擬：main 3 次中 2 次「未收斂但低於門檻」，
     修正版一輪即收斂；收斂對收斂 Δ 0.57–0.64（通過），凍結對凍結最高 Δ 1.91／3.66% > 24（失敗）。
 - [ ] 用「一律收斂」的 harness 再跑一次完整矩陣，確認：
+      （進行中：2026-10-09 在本機跑，HEAD 即本筆進度 commit，程式同 `5cc21d3`，非 debug、兩輪；
+      本機輸出 `/private/tmp/claude-501/lg-perf7/`，完成後存 `docs/perf/2026-10-09-pr7-converged/`。
+      跑完前不再 commit，結果檔的 cand sha 會是這筆）
   - [ ] 上面 3 張（`solid-glow/ani-battle/2`、`max-glass/ani-battle/1`、`yt4k/light/default/1`）通過
   - [ ] `ani/dark/default/ani-white/0`：若仍以 `--lg-tint-rgb` 跨一階而失敗，判斷是否為倒影對主色
         的確定性影響；若是，考慮色調量化加遲滯（hysteresis），避免在邊界附近來回跳
