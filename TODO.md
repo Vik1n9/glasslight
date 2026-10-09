@@ -643,6 +643,24 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
   - `yt4k/light/default/yt4k-heavy/1` r2：Δ 2.15、0%（雜訊 1.11），`--lg-glass-live 0.60 → 0.58`
   - `ani/dark/default/ani-white/0` r2：Δ 2.32（門檻 2.08）、0%（雜訊 1.39），`--lg-tint-rgb 128 104 104 → 128 112 112`
   - 候選（未驗證）：靜止畫面改為每 tick 放鬆 50%，玻璃底色與量化色階停在和 main 不同的位置
+  - **2026-10-09 分析**：4 張的 base 都**還沒收斂**——強制 tick 後畫面仍會變（`freshDiff` 0.18–0.49），
+    cand 則 0–0.02（全部 96 張 cand 最大 0.09；base p90 0.16、最大 8.27）。base 的變動低於
+    「過期」門檻（2），被當成最新，未收斂的畫面就成了比對基準。
+    - `solid-glow/ani-battle/2`：> 24 的像素在玻璃**外**（上緣、兩條玻璃間的縫、左緣，
+      即不透明玻璃露出背景之處）；base 那裡較亮（玻璃上方 107.9 vs 100.5，淺色主題＝scrim
+      較高＝過期方向）。導覽列對比兩邊 7.4／7.3:1。列出的 `--lg-glass-live 0.32 → 0.00`
+      在 solid 玻璃下看不到（玻璃本身不透明度更高）。
+    - `max-glass/ani-battle/1`、`yt4k/light/default/1`：不同的玻璃值方向也符合「base 尚在放鬆」。
+    - **可能例外** `ani/dark/default/ani-white/0`：`--lg-tint-rgb` 跨一個 8 階（104 → 112）。
+      色調只取決於取樣畫面、與時序無關，可能是倒影讓主色剛好跨過量化邊界（推論）。
+  - **處理**：harness 改為每張凍結畫面一律強制收斂（每輪 4 次 tick，直到不再變化），兩版都用
+    收斂畫面比對；`state-current` 仍把關明顯過期。本地模擬：main 3 次中 2 次「未收斂但低於門檻」，
+    修正版一輪即收斂；收斂對收斂 Δ 0.57–0.64（通過），凍結對凍結最高 Δ 1.91／3.66% > 24（失敗）。
+- [ ] 用「一律收斂」的 harness 再跑一次完整矩陣，確認：
+  - [ ] 上面 3 張（`solid-glow/ani-battle/2`、`max-glass/ani-battle/1`、`yt4k/light/default/1`）通過
+  - [ ] `ani/dark/default/ani-white/0`：若仍以 `--lg-tint-rgb` 跨一階而失敗，判斷是否為倒影對主色
+        的確定性影響；若是，考慮色調量化加遲滯（hysteresis），避免在邊界附近來回跳
+  - [ ] cand 的 `state-current` 仍全部通過；沒有新的 CPU／RAM 警告（每張凍結畫面多約 1.5 秒）
 - [x] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：（2026-10-08 修正後重跑：**Δ 0.22，same**，
       差異消失；最可能是同一個 scrim 放鬆到一半的問題，屬推論）兩邊 `state-current` 都通過、
       三次量測相同 → 是 PR 造成的確定性差異，不是上面的缺陷。下一次執行的 FAIL 訊息會列出
@@ -650,7 +668,8 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
       ① `--lg-tint-rgb`（量化 8 階、spill 0.1，估計影響不到 1 個色階，可能性低），或
       ② `--lg-glow-opacity`／`--lg-glow-lift`（淺色主題依 `lum` 而變；solid-glow 的 glow 很強，
       延伸到頁首後方）
-- [ ] 判讀 `ani/light/max-glass/ani-battle/0@1201s`：
+- [x] 判讀 `ani/light/max-glass/ani-battle/0@1201s`（2026-10-09：根因確認為 scrim 停在半途，
+      已修正；`5bdde36` 重跑 Δ 0.32，same）：
   - [ ] 若 **base** 的 `state-current` 為 WARN、凍結畫面比對 PASS → 證實是 main 既有缺陷
         （凍結後可讀性狀態過期），進行下一項
   - [ ] 若 base `state-current` 正常但仍 DIFF → 上面的推論錯誤，差異是 PR 造成的，
@@ -659,7 +678,8 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
     **仍 FAIL**（Δ 7.73）→ 第三種情況：main 缺陷存在，另外還有未解釋的差異（cand 的導覽列
     比 base fresh 更淡，且 cand 自己的 fresh solve 不改變它）。資料：
     `docs/perf/2026-10-08-pr7-state-current/`。
-- [ ] cand 所有凍結畫面的 `state-current` 都通過（cand 若失敗即為本 PR 的問題）
+- [x] cand 所有凍結畫面的 `state-current` 都通過（cand 若失敗即為本 PR 的問題）
+      （2026-10-08 `5bdde36` 重跑：24 份 cand 結果 0 張過期）
       （2026-10-08：`ani/light/max-glass/ani-battle/2` cand 過期，Δ 0.82／3.30%，
       與 base 完全相同 → 疑為同一個 main 缺陷，PR 未改變；其餘已量的格子全部通過）
 - [x] 若證實是 main 的缺陷：找出根因 → 已確認並在本分支修正（見「根因」「修正」）

@@ -56,3 +56,24 @@ Base (main, unfixed) is still stale on both: Δ 8.27 and 6.25. The harness now t
 - **`solid-glow/ani-battle/2` is the clear one.** Cand's `--lg-glass-live` is 0.00 where base has 0.32, and 4.59 % of pixels in the header's left half differ by more than 24.
 - Base passed `state-current` on all four frames, so none of them is main's staleness.
 - A candidate cause, **not verified**: the fix relaxes the tint and the scrim 50 % a tick over a still picture, where it used to be 15 %. That could leave `--lg-glass-live` and the tint quantisation in a different place than main's slower, timing-dependent stop.
+
+## Analysis (follow-up)
+
+The four new failures are **main's unconverged state, not cand regressions**, with one possible exception.
+
+- **Base was still moving on all four frames.** Its `freshDiff` (how much forced ticks still changed the still) is 0.18–0.49, while cand's is 0–0.02.
+  - Across all 96 stills per side, cand never exceeds 0.09. Base reaches p90 0.16 and a max of 8.27.
+  - Base stayed under the "stale" threshold (mean 2), so it counted as current, and its unconverged still became the reference.
+- **`solid-glow/ani-battle/2`.** The pixels that differ by more than 24 are outside the glass: the top strip, the gap between the bars, and the left edge. That is where near-opaque solid glass lets the backdrop show.
+  - Base is brighter there (above-player mean 107.9 vs 100.5): more scrim in the light theme, which is the stale direction.
+  - Nav contrast is 7.4 vs 7.3:1, well above target on both sides.
+  - The `--lg-glass-live 0.32 → 0.00` it names is invisible at solid glass, whose own alpha is higher. Base's tint is still decaying at 15 % per tick there.
+- **`max-glass/ani-battle/1` and `yt4k/light/default/1`.** The glass values that differ point the same way: base's scrim or tint is still relaxing.
+- **Possible exception: `ani/dark/default/ani-white/0`** (Δ 2.32, limit 2.08). `--lg-tint-rgb` flips one quantisation step (104 → 112). The tint depends only on the sampled canvas, not on timing, so this may be the reflection nudging the dominant colour across a /8 boundary. The next run will show whether it survives.
+
+**Harness change (next commit).** Every still is forced to converge, in rounds of four ticks until the frame stops moving, and both builds are compared on their converged frames.
+- `state-current` still gates a visibly stale still.
+- Off-machine simulation:
+  - main is unconverged but under the threshold in 2 of 3 cases;
+  - the fixed build converges in one round;
+  - converged vs converged differs by Δ 0.57–0.64, a pass, where still vs still showed up to Δ 1.91 and 3.66 % > 24, a fail.

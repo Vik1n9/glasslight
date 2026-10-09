@@ -426,41 +426,36 @@ for (const name of presetNames) {
       // Is the frozen frame the extension's own current answer? A settled still
       // can still hold a legibility state (scrim, glass tint) solved for an
       // earlier picture: shot after shot is identical, yet a fresh sample would
-      // change it. Force a few (LG.ambient.tick: re-read the canvas, re-solve,
-      // as a theme switch does) and shoot again. A difference fails this run's
-      // `state-current` check, and compare.mjs then judges the other build
-      // against this fresh frame rather than the stale one.
-      // Four forced ticks, not one: a build that stops relaxing early moves
-      // only 15 % of the way per tick, too little to show on a small gap.
+      // change it. Force ticks (LG.ambient.tick: re-read the canvas, re-solve,
+      // as a theme switch does) in rounds of four until the frame stops moving,
+      // and keep that converged frame: compare.mjs judges both builds on it, so
+      // a build whose state stops part way (main before the scrim-settle fix:
+      // a forced tick moves it only 15 %, and behind near-opaque glass the gap
+      // barely shows) can't turn its timing into a difference. A converged
+      // frame that differs visibly from the still fails this run's
+      // `state-current` check.
+      let converged = pair[1];
       let forced = false;
-      for (let j = 0; j < 4; j++) {
-        forced = (await inExtension('(LG.ambient.tick(), true)')) === true || forced;
-        await sleep(300);
+      for (let k = 0; k < 10; k++) {
+        for (let j = 0; j < 4; j++) {
+          forced = (await inExtension('(LG.ambient.tick(), true)')) === true || forced;
+          await sleep(250);
+        }
+        if (!forced) break;
+        await sleep(300); // the 240 ms scrim ease
+        const next = await page.screenshot({ clip: cfg.region });
+        const done = next.equals(converged) || (await nearlyIdentical(converged, next));
+        converged = next;
+        if (done) break;
       }
       if (stable && forced) {
-        await sleep(300); // the 240 ms scrim ease
-        let fresh = await page.screenshot({ clip: cfg.region });
-        let d = await shotDiff(pair[1], fresh);
+        const d = await shotDiff(pair[1], converged);
         entry.current = d.mean <= THRESHOLDS.visualMean && d.pct <= THRESHOLDS.visualPct;
-        if (!entry.current) {
-          // Stale: keep it ticking until the frame stops moving, so the fresh
-          // frame is the converged answer. A build that stops relaxing early
-          // (main before the scrim-settle fix) gets one step per forced tick.
-          for (let k = 0; k < 10; k++) {
-            for (let j = 0; j < 4; j++) {
-              await inExtension('(LG.ambient.tick(), true)');
-              await sleep(250);
-            }
-            const next = await page.screenshot({ clip: cfg.region });
-            const done = await nearlyIdentical(fresh, next);
-            fresh = next;
-            if (done) break;
-          }
-          d = await shotDiff(pair[1], fresh);
-          entry.fresh = file.replace('.png', '-fresh.png');
-          fs.writeFileSync(path.join(out, entry.fresh), fresh);
-        }
         entry.freshDiff = { mean: +d.mean.toFixed(2), pct: +d.pct.toFixed(2) };
+        if (!converged.equals(pair[1]) && !(await nearlyIdentical(pair[1], converged))) {
+          entry.fresh = file.replace('.png', '-fresh.png');
+          fs.writeFileSync(path.join(out, entry.fresh), converged);
+        }
         check(`${name}/${clip.name}/${i}:state-current`, entry.current, entry.current ? 'a fresh solve leaves the frame as is' : `a fresh sample + solve changed the frame (mean Δ ${d.mean.toFixed(2)}, ${d.pct.toFixed(2)}% px > 8): the frozen legibility state was stale`);
       }
       r.stills.push(entry);
