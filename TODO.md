@@ -656,14 +656,19 @@ base 的 fresh 畫面比，門檻不放寬。離線已驗證判定邏輯與「�
   - **處理**：harness 改為每張凍結畫面一律強制收斂（每輪 4 次 tick，直到不再變化），兩版都用
     收斂畫面比對；`state-current` 仍把關明顯過期。本地模擬：main 3 次中 2 次「未收斂但低於門檻」，
     修正版一輪即收斂；收斂對收斂 Δ 0.57–0.64（通過），凍結對凍結最高 Δ 1.91／3.66% > 24（失敗）。
-- [ ] 用「一律收斂」的 harness 再跑一次完整矩陣，確認：
-      （進行中：2026-10-09 在本機跑，HEAD 即本筆進度 commit，程式同 `5cc21d3`，非 debug、兩輪；
-      本機輸出 `/private/tmp/claude-501/lg-perf7/`，完成後存 `docs/perf/2026-10-09-pr7-converged/`。
-      跑完前不再 commit，結果檔的 cand sha 會是這筆）
-  - [ ] 上面 3 張（`solid-glow/ani-battle/2`、`max-glass/ani-battle/1`、`yt4k/light/default/1`）通過
+- [x] 用「一律收斂」的 harness 再跑一次完整矩陣，確認：
+      （2026-10-09 11:00 +0800 跑完，63.5 分鐘；base `d78a2e4`、cand `e13a599`（程式同 `5cc21d3`）、
+      harness `f5a190b51d` 全部一致。總判定 FAIL 1／WARN 5。結果 `docs/perf/2026-10-09-pr7-converged/`）
+  - [x] 上面 3 張（`solid-glow/ani-battle/2`、`max-glass/ani-battle/1`、`yt4k/light/default/1`）通過
+        （Δ 3.46 → 0.56、2.16 → 1.23、2.15 → 1.21，皆 same）
   - [ ] `ani/dark/default/ani-white/0`：若仍以 `--lg-tint-rgb` 跨一階而失敗，判斷是否為倒影對主色
         的確定性影響；若是，考慮色調量化加遲滯（hysteresis），避免在邊界附近來回跳
+        （2026-10-09：第 1 輪**仍失敗**，Δ 2.32、`128 104 104 → 128 112 112`，與上一輪數值相同；
+        第 2 輪 same Δ 1.07。兩次執行都是「兩輪中一輪失敗」且不在同一輪，兩邊都已收斂 → 不是時序，
+        較像主色落在 /8 量化邊界、偶爾被推過去，符合遲滯的方向；推論，未驗證）
   - [ ] cand 的 `state-current` 仍全部通過；沒有新的 CPU／RAM 警告（每張凍結畫面多約 1.5 秒）
+        （`state-current`：cand 24 份全部通過 ✓。新 RAM 警告：`ani/dark/solid-glow/ani-battle`
+        2809.93 → 3299.86 MB ×1.17（軟門檻），上一輪沒有；舊的 max-glass「leak?」也沒出現）
 - [x] `yt4k/light/solid-glow/yt4k-heavy/0@36s` 的 Δ 2.25：（2026-10-08 修正後重跑：**Δ 0.22，same**，
       差異消失；最可能是同一個 scrim 放鬆到一半的問題，屬推論）兩邊 `state-current` 都通過、
       三次量測相同 → 是 PR 造成的確定性差異，不是上面的缺陷。下一次執行的 FAIL 訊息會列出
