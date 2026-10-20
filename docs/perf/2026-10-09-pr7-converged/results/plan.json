@@ -1,0 +1,97 @@
+{
+ "names": [
+  "full"
+ ],
+ "base": "origin/main",
+ "cand": "HEAD",
+ "harness": "f5a190b51d",
+ "rounds": 2,
+ "cells": [
+  {
+   "site": "yt",
+   "theme": "light",
+   "presets": [
+    "default",
+    "max-glass",
+    "solid-glow"
+   ],
+   "clips": [
+    "yt-lightshow"
+   ],
+   "layout": true,
+   "off": true
+  },
+  {
+   "site": "yt",
+   "theme": "dark",
+   "presets": [
+    "default",
+    "max-glass",
+    "solid-glow"
+   ],
+   "clips": [
+    "yt-lightshow"
+   ],
+   "layout": false,
+   "off": true
+  },
+  {
+   "site": "yt4k",
+   "theme": "light",
+   "presets": [
+    "default",
+    "max-glass",
+    "solid-glow"
+   ],
+   "clips": [
+    "yt4k-heavy"
+   ],
+   "layout": false,
+   "off": true
+  },
+  {
+   "site": "yt4k",
+   "theme": "dark",
+   "presets": [
+    "default",
+    "max-glass",
+    "solid-glow"
+   ],
+   "clips": [
+    "yt4k-heavy"
+   ],
+   "layout": false,
+   "off": true
+  },
+  {
+   "site": "ani",
+   "theme": "light",
+   "presets": [
+    "default",
+    "max-glass",
+    "solid-glow"
+   ],
+   "clips": [
+    "ani-white",
+    "ani-battle"
+   ],
+   "layout": false,
+   "off": true
+  },
+  {
+   "site": "ani",
+   "theme": "dark",
+   "presets": [
+    "default",
+    "max-glass",
+    "solid-glow"
+   ],
+   "clips": [
+    "ani-white",
+    "ani-battle"
+   ],
+   "layout": false,
+   "off": true
+  }
+ ]
+}

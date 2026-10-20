@@ -64,7 +64,7 @@ Site content shown in the screenshots belongs to its respective owners.
 
 | Layer (WWDC25 guidance) | YouTube | 動畫瘋 | Treatment |
 |---|---|---|---|
-| Background | whole page | whole page | `#lg-ambient`: the playing picture as one of three Backdrop modes (popup) — Hybrid (default): enlarged behind the player — beside a side column, out to that column and to the description below — with radial light from the frame's edges past it; Enlarged: the frame enlarged over the viewport; Radial: the picture's edges streamed outward from the player (Hybrid and Radial need WebGL, else Enlarged) — or the hovered / centred thumbnail or cover blurred over it, plus a glow behind the player |
+| Background | whole page | whole page | `#lg-ambient`: the playing picture as one of three Backdrop modes (popup / settings page) — Hybrid (default): enlarged behind the player — beside a side column, out to that column and to the description below — with radial light from the frame's edges past it; Enlarged: the frame enlarged over the viewport; Radial: the picture's edges streamed outward from the player (Hybrid and Radial need WebGL, else Enlarged) — or the hovered / centred thumbnail or cover blurred over it, plus a glow behind the player |
 | Content | videos, description, comments, panels | info panel, comments, danmu column, anime / episode / news / history cards, schedule | YouTube: fills and transparency; on the light watch page, frosted cards (the backdrop between them stays unwashed). 動畫瘋: one card glass for every card (a dense panel up to the Transparency midpoint, Clear glass past it) |
 | Navigation | masthead, chip bar, menus, drawer | top bar, main menu, user menu, search suggestions, sort and APP menus | Regular glass: frost + refraction + specular rim + adaptive shadow |
 | Over media | player controls, Shorts actions | player control bar | Clear glass, 35% dimming layer over bright footage |
@@ -76,9 +76,12 @@ Clear variant and the backdrop
 turns from a wash into the footage itself (sharper, larger canvas, less
 blur), laid out by the Backdrop mode: in Hybrid the picture enlarged behind
 the player, then light streaming from its edges to the edges of the page,
-so the light is continuous with the video while the glass lenses it. Burned-in
-subtitles stay inside the player: the light is taken only from the frame's
-outer band, and right under the player it starts at the player's edge. Neither end stops being glass: the tint stays
+so the light is continuous with the video while the glass lenses it. Right
+under the player, down to the title, the picture is reflected instead:
+mirrored on its bottom edge, blurred and dimmed with depth, fading into the
+light below. Burned-in subtitles stay inside the player: the light is taken
+only from the frame's outer band, and the reflection blurs a mirrored
+subtitle line past reading. Neither end stops being glass: the tint stays
 between 0.12 and 0.88, light keeps spilling in, and the rim brightens as the
 tint thins. Frost thins with it, down to a quarter of the Blur setting at
 100 % (2–6 px, glass rather than frosted glass); menus, and glass over
@@ -106,13 +109,38 @@ are found by value in its stylesheets, and its link blue (deepened on light
 pages, lifted on dark ones); on 動畫瘋 the same applies to the site's
 cyan accents and light-grey labels, which are lifted or deepened per theme.
 
+## Settings page
+
+The popup holds the quick controls; **All settings** in it (or the
+extension's Options entry, or the page that opens once after installing)
+opens a full settings page (`src/options/`) where every setting has a
+description of what it does, what raising or lowering it changes, and what
+it costs. Sections: General (on/off, language), Appearance (light, blur,
+Transparency, refraction, Reduce transparency), Behaviour (backdrop,
+Performance mode, Static backdrop), Advanced (contrast target, Reset — which
+asks twice). Both pages share one definition of the defaults
+(`src/shared/defaults.js`) and one storage layer (`src/shared/prefs.js`):
+writes are batched 400 ms after the last change (a released slider or a
+toggle writes at once, at most once a second), which keeps a dragged slider
+inside `chrome.storage.sync`'s 120 writes a minute; a failed write says so
+and retries. Each page follows changes made in the other.
+
+The page ends with an optional, voluntary NT$100 contribution button. It
+opens the developer's hosted checkout page in a new tab and is unrelated to
+every feature: nothing is limited without it and nothing is unlocked with
+it. The extension loads no payment code, adds no permission, and never sees
+payment details. (Development builds point at a test link;
+`scripts/build.py` refuses to package it.)
+
 ## Languages
 
 Traditional Chinese, Simplified Chinese, English, Spanish, Japanese and
-Korean (`_locales/`). By default the popup follows the browser language
-(English as fallback); a Language menu in the popup overrides it. The
-extension's name and store description always follow the browser language —
-Chrome offers no way to change those at runtime.
+Korean (`_locales/`; the settings page's descriptions in
+`src/options/descriptions/`). By default the popup and the settings page
+follow the browser language (English as fallback); a Language menu in either
+overrides it for both. The extension's name and store description always
+follow the browser language — Chrome offers no way to change those at
+runtime.
 
 ## Install
 
@@ -134,13 +162,16 @@ code" archive is the repository, including the development reloader.
 
 `python3 scripts/build.py` → `dist/glasslight-<version>.zip`, ready for the
 Chrome Web Store. It drops the dev auto-reload and checks that every file the
-manifest references exists, locales share one key set, and descriptions fit
-Chrome's 132-character limit. Store texts, privacy answers and assets live in
+manifest references exists, locales share one key set (the settings page's
+descriptions too), descriptions fit Chrome's 132-character limit, and the
+contribution button no longer points at the test link. Store texts, privacy answers and assets live in
 `store/` (`store/listing.md`); the privacy policy is [PRIVACY.md](PRIVACY.md).
 
 ## Layout
 
 ```
+src/shared/defaults.js    default settings: the one definition (content scripts, popup, options)
+src/shared/prefs.js       extension pages: language, controls ↔ storage, batched writes
 src/content/settings.js   shared namespace + chrome.storage.sync settings
 src/content/contrast.js   WCAG luminance/contrast, scrim solver, dominant colour
 src/content/refract.js    SVG displacement maps (SDF of a rounded rect) as backdrop-filter
@@ -151,8 +182,9 @@ src/content/main.js       YouTube: routing (yt-navigate-finish), decoration, poi
 src/content/ani-gamer.js  動畫瘋 adapter: LG.site selectors, settings, decoration
 src/styles/glass.css      shared visual rules, scoped to html.lg-on
 src/styles/ani-gamer.css  動畫瘋 layer, scoped to html.lg-ani
-src/background.js         thumbnail fetch/downsample, dev reload
-src/popup/                settings UI
+src/background.js         thumbnail fetch/downsample, settings page on first install, dev reload
+src/popup/                quick settings
+src/options/              settings page: every setting described, voluntary contribution
 ```
 
 ## Notes
@@ -168,6 +200,14 @@ src/popup/                settings UI
   changes, the backdrop's slow drift holds still until playback resumes, and
   動畫瘋's endlessly looping attention cues stop after three rounds — an idle
   page costs about what it does without the extension.
+- Static backdrop (popup / settings page): no frame loop at all. One frame is taken when a
+  video loads, pauses or seeks (after its letterbox is measured, and past a
+  black start) and copied aside; scrolling or resizing redraws that copy once
+  the page stops moving. Playback then costs what an idle page does. The
+  glass, Transparency and the contrast solve are unchanged; the player
+  controls keep their dimming layer on, since nothing follows the footage's
+  brightness any more. Independent of Performance mode, which keeps the
+  light live at 15 fps.
 - The Hybrid and Radial backdrops are one WebGL pass (`EXT_shader_texture_lod`,
   for explicit mip levels) over a 256×256 copy of the frame; without it the
   backdrop falls back to Enlarged. Both hold the backdrop's drift still, so it
@@ -175,7 +215,8 @@ src/popup/                settings UI
 - Refraction is Chromium-only; with it off (or in performance mode) glass
   falls back to `blur() saturate()`.
 - Honours `prefers-reduced-transparency`, `prefers-contrast: more`,
-  `prefers-reduced-motion`, plus in-popup Reduce Transparency / Performance.
+  `prefers-reduced-motion`, plus in-popup Reduce Transparency / Performance /
+  Static backdrop.
 
 ## Credits
 

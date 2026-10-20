@@ -1,29 +1,13 @@
-// Shared namespace + user settings (chrome.storage.sync).
+// Shared namespace + user settings (chrome.storage.sync). LG.DEFAULTS comes
+// from src/shared/defaults.js, loaded first.
 window.LG = window.LG || {};
-
-LG.DEFAULTS = {
-  enabled: true,
-  intensity: 70, // ambient light strength, 0–100
-  blur: 24, // glass frost radius in px
-  transparency: 50, // 0 solid glass · 50 designed look · 100 immersive (see LG.immersion)
-  refraction: true, // SVG lensing on navigation glass (Chromium only)
-  reduceTransparency: false,
-  performance: false, // 15 fps sampling, no refraction
-  contrastTarget: 4.5, // WCAG AA for body text; the popup offers 1.5–4.5
-  backdrop: 'hybrid', // 'enlarged' · 'hybrid' · 'radial' (see ambient.js)
-};
 
 LG.settings = { ...LG.DEFAULTS };
 LG._settingListeners = [];
 
 LG.onSettings = (fn) => LG._settingListeners.push(fn);
 
-// Values stored by older versions can sit outside today's popup ranges (the
-// contrast target once went up to 7).
-function clampSettings() {
-  const s = LG.settings;
-  s.contrastTarget = Math.min(4.5, Math.max(1.5, Number(s.contrastTarget) || LG.DEFAULTS.contrastTarget));
-}
+const clampSettings = () => LG.clampSettings(LG.settings);
 
 LG.loadSettings = async () => {
   try {

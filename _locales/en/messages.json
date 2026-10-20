@@ -30,6 +30,12 @@
   "optPerformance": {
     "message": "Performance mode"
   },
+  "optStatic": {
+    "message": "Static backdrop"
+  },
+  "optStaticHint": {
+    "message": "Light from one frame per video, pause or seek instead of following playback. Saves power; the glass stays the same."
+  },
   "optBackdrop": {
     "message": "Backdrop"
   },
@@ -50,5 +56,50 @@
   },
   "optLanguageAuto": {
     "message": "Follow browser"
+  },
+  "optionsTitle": {
+    "message": "Glasslight settings"
+  },
+  "openOptions": {
+    "message": "All settings"
+  },
+  "secGeneral": {
+    "message": "General"
+  },
+  "secAppearance": {
+    "message": "Appearance"
+  },
+  "secBehavior": {
+    "message": "Behaviour"
+  },
+  "secAdvanced": {
+    "message": "Advanced"
+  },
+  "secSupport": {
+    "message": "Support development"
+  },
+  "statusSaving": {
+    "message": "Saving…"
+  },
+  "statusSaved": {
+    "message": "Saved"
+  },
+  "statusError": {
+    "message": "Couldn’t save — retrying"
+  },
+  "statusQuota": {
+    "message": "Saving too often — retrying shortly"
+  },
+  "resetAction": {
+    "message": "Reset"
+  },
+  "resetConfirm": {
+    "message": "Press again to reset"
+  },
+  "donateButton": {
+    "message": "Contribute NT$100"
+  },
+  "donateTestLink": {
+    "message": "Test link — not a real payment page"
   }
 }
